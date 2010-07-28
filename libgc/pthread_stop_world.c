@@ -99,6 +99,8 @@ word GC_stop_count;	/* Incremented at the beginning of GC_stop_world. */
  * pointer(s) and acknowledge.
  */
 
+#define SIG_THR_RESTART SIGWINCH
+
 #ifndef SIG_THR_RESTART
 #  if defined(GC_HPUX_THREADS) || defined(GC_OSF1_THREADS)
 #    ifdef _SIGRTMIN
