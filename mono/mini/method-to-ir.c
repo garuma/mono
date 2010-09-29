@@ -101,6 +101,11 @@
 /* Determine whenever 'ins' represents a load of the 'this' argument */
 #define MONO_CHECK_THIS(ins) (mono_method_signature (cfg->method)->hasthis && ((ins)->opcode == OP_MOVE) && ((ins)->sreg1 == cfg->args [0]->dreg))
 
+static int hijacking = FALSE;
+
+void dummy_hijack_print (MonoMethod* method);
+void mono_emit_hijack_code (MonoCompile*);
+
 static int ldind_to_load_membase (int opcode);
 static int stind_to_store_membase (int opcode);
 
@@ -5260,7 +5265,7 @@ static void
 set_exception_object (MonoCompile *cfg, MonoException *exception)
 {
 	cfg->exception_type = MONO_EXCEPTION_OBJECT_SUPPLIED;
-	MONO_GC_REGISTER_ROOT_SINGLE (cfg->exception_ptr);
+	MONO_GC_REGISTER_ROOT (cfg->exception_ptr);
 	cfg->exception_ptr = exception;
 }
 
@@ -10025,6 +10030,10 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 			g_warning ("opcode 0x%02x not handled", *ip);
 			UNVERIFIED;
 		}
+
+		if (hijacking)
+			//if ((hijacking = (getenv ("MONO_HIJACKING") != NULL)))
+				mono_emit_hijack_code (cfg);
 	}
 	if (start_new_bblock != 1)
 		UNVERIFIED;
@@ -10168,6 +10177,42 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 	dont_inline = g_list_remove (dont_inline, method);
 	cfg->headers_to_free = g_slist_prepend_mempool (cfg->mempool, cfg->headers_to_free, header);
 	return -1;
+}
+
+void
+mono_emit_hijack_code (MonoCompile *cfg)
+{
+	MonoInst* arg[1];
+	char* full_name = NULL;
+
+	/* Skip corlib for now and avoid problems */
+	if (cfg->method->klass->image == mono_defaults.corlib)
+		return;
+
+	/* Also skip heisen branded method (e.g. DisableInjection) */
+	if (g_str_has_prefix ((full_name = mono_type_get_full_name (cfg->method->klass)), "Heisen"))
+		return;	
+
+	if (g_str_has_prefix (full_name, "System"))
+		return;
+
+	if (g_str_has_prefix (full_name, "Mono"))
+		return;
+			
+	EMIT_NEW_PCONST (cfg, arg[0], cfg->method);
+	mono_emit_jit_icall (cfg, dummy_hijack_print, arg);
+}
+
+void
+mono_enable_hijack_code ()
+{
+	hijacking = TRUE;
+}
+
+void
+mono_disable_hijack_code ()
+{
+	hijacking = FALSE;
 }
 
 static int
