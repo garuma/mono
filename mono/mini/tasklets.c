@@ -23,14 +23,14 @@ internal_init (void)
 	keepalive_stacks = mono_g_hash_table_new (NULL, NULL);
 }
 
-void*
+static void*
 continuation_alloc (void)
 {
 	MonoContinuation *cont = g_new0 (MonoContinuation, 1);
 	return cont;
 }
 
-void
+static void
 continuation_free (MonoContinuation *cont)
 {
 	if (cont->saved_stack) {
@@ -40,70 +40,6 @@ continuation_free (MonoContinuation *cont)
 		mono_gc_free_fixed (cont->saved_stack);
 	}
 	g_free (cont);
-}
-
-MonoException*
-continuation_mark_frame_num (MonoContinuation *cont, int level, MonoMethod** method)
-{
-	MonoJitTlsData *jit_tls;
-	MonoLMF *lmf;
-	MonoContext ctx, new_ctx;
-	MonoJitInfo *ji, rji;
-
-	if (cont->domain)
-		return mono_get_exception_argument ("cont", "Already marked");
-
-	jit_tls = TlsGetValue (mono_jit_tls_id);
-	lmf = mono_get_lmf();
-	cont->domain = mono_domain_get ();
-	cont->thread_id = GetCurrentThreadId ();
-
-	/* get to the frame that called Mark () */
-	memset (&rji, 0, sizeof (rji));
-	do {
-		ji = mono_find_jit_info (cont->domain, jit_tls, &rji, NULL, &ctx, &new_ctx, NULL, &lmf, NULL, NULL);
-		if (!ji || ji == (gpointer)-1) {
-			return mono_get_exception_not_supported ("Invalid stack frame");
-		}
-		ctx = new_ctx;
-		if (--level == 0)
-			break;
-	} while (1);
-
-	cont->top_sp = MONO_CONTEXT_GET_SP (&ctx);
-	if (method != NULL)
-		*method = mono_jit_info_get_method (ji);
-	/*g_print ("method: %s, sp: %p\n", ji->method->name, cont->top_sp);*/
-
-	return NULL;
-	/*	
-	MonoJitTlsData *jit_tls;
-	MonoLMF *lmf;
-	MonoContext ctx, new_ctx;
-	MonoJitInfo *ji, rji;
-
-	if (cont->domain)
-		return mono_get_exception_argument ("cont", "Already marked");
-
-	jit_tls = TlsGetValue (mono_jit_tls_id);
-	lmf = mono_get_lmf();
-	cont->domain = mono_domain_get ();
-	cont->thread_id = GetCurrentThreadId ();
-
-	memset (&rji, 0, sizeof (rji));
-	do {
-		ji = mono_find_jit_info (cont->domain, jit_tls, &rji, NULL, &ctx, &new_ctx, NULL, &lmf, NULL, NULL);
-		if (!ji || ji == (gpointer)-1) {
-			return mono_get_exception_not_supported ("Invalid stack frame");
-		}
-		ctx = new_ctx;
-		if (strcmp (ji->method->name, name) == 0)
-			break;
-	} while (1);
-
-	cont->top_sp = MONO_CONTEXT_GET_SP (&ctx);
-
-	return NULL;*/
 }
 
 static MonoException*
@@ -143,7 +79,7 @@ continuation_mark_frame (MonoContinuation *cont)
 	return NULL;
 }
 
-int
+static int
 continuation_store (MonoContinuation *cont, int state, MonoException **e)
 {
 	MonoLMF *lmf = mono_get_lmf ();
@@ -188,7 +124,7 @@ continuation_store (MonoContinuation *cont, int state, MonoException **e)
 	return state;
 }
 
-MonoException*
+static MonoException*
 continuation_restore (MonoContinuation *cont, int state)
 {
 	MonoLMF **lmf_addr = mono_get_lmf_addr ();

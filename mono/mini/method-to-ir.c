@@ -60,6 +60,7 @@
 #include "jit-icalls.h"
 #include "jit.h"
 #include "debugger-agent.h"
+//#include "hijacking.h"
 
 #define BRANCH_COST 10
 #define INLINE_LENGTH_LIMIT 20
@@ -101,10 +102,6 @@
 /* Determine whenever 'ins' represents a load of the 'this' argument */
 #define MONO_CHECK_THIS(ins) (mono_method_signature (cfg->method)->hasthis && ((ins)->opcode == OP_MOVE) && ((ins)->sreg1 == cfg->args [0]->dreg))
 
-static int hijacking = FALSE;
-
-void dummy_hijack_print (MonoMethod* method);
-void mono_emit_hijack_code (MonoCompile*);
 
 static int ldind_to_load_membase (int opcode);
 static int stind_to_store_membase (int opcode);
@@ -10031,7 +10028,7 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 			UNVERIFIED;
 		}
 
-		if (hijacking)
+		if (mono_is_hijacking_enabled ())
 			//if ((hijacking = (getenv ("MONO_HIJACKING") != NULL)))
 				mono_emit_hijack_code (cfg);
 	}
@@ -10177,42 +10174,6 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 	dont_inline = g_list_remove (dont_inline, method);
 	cfg->headers_to_free = g_slist_prepend_mempool (cfg->mempool, cfg->headers_to_free, header);
 	return -1;
-}
-
-void
-mono_emit_hijack_code (MonoCompile *cfg)
-{
-	MonoInst* arg[1];
-	char* full_name = NULL;
-
-	/* Skip corlib for now and avoid problems */
-	if (cfg->method->klass->image == mono_defaults.corlib)
-		return;
-
-	/* Also skip heisen branded method (e.g. DisableInjection) */
-	if (g_str_has_prefix ((full_name = mono_type_get_full_name (cfg->method->klass)), "Heisen"))
-		return;	
-
-	if (g_str_has_prefix (full_name, "System"))
-		return;
-
-	if (g_str_has_prefix (full_name, "Mono"))
-		return;
-			
-	EMIT_NEW_PCONST (cfg, arg[0], cfg->method);
-	mono_emit_jit_icall (cfg, dummy_hijack_print, arg);
-}
-
-void
-mono_enable_hijack_code ()
-{
-	hijacking = TRUE;
-}
-
-void
-mono_disable_hijack_code ()
-{
-	hijacking = FALSE;
 }
 
 static int

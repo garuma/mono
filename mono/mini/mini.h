@@ -2226,4 +2226,15 @@ enum {
 	MONO_AOT_WRAPPER_LAST
 };
 
+int mono_is_hijacking_enabled (void);
+void mono_enable_hijack_code (void);
+void mono_disable_hijack_code (void);
+
+void hijack_func (void);
+void mono_emit_hijack_code (MonoCompile*);
+
+void mono_hijack_init (void);
+
+void register_icall (gpointer, const char *, const char *, gboolean);
+
 #endif /* __MONO_MINI_H__ */

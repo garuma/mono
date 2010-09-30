@@ -360,7 +360,8 @@ common_sources = \
 	debug-debugger.h	\
 	xdebug.c			\
 	mini-llvm.h			\
-	mini-llvm-cpp.h
+	mini-llvm-cpp.h		\
+	hijacking.c
 
 test_sources = 			\
 	basic-calls.cs 		\

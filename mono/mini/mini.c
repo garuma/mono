@@ -68,6 +68,7 @@
 #include "debug-mini.h"
 #include "mini-gc.h"
 #include "debugger-agent.h"
+//#include "hijacking.h"
 
 static gpointer mono_jit_compile_method_with_opt (MonoMethod *method, guint32 opt, MonoException **ex);
 
@@ -2123,7 +2124,7 @@ mono_register_opcode_emulation (int opcode, const char *name, const char *sigstr
 	emul_opcode_hit_cache [opcode >> (EMUL_HIT_SHIFT + 3)] |= (1 << (opcode & EMUL_HIT_MASK));
 }
 
-static void
+void
 register_icall (gpointer func, const char *name, const char *sigstr, gboolean save)
 {
 	MonoMethodSignature *sig;
@@ -3336,165 +3337,6 @@ mono_save_seq_point_info (MonoCompile *cfg)
 	g_ptr_array_free (cfg->seq_points, TRUE);
 	cfg->seq_points = NULL;
 }
-
-void mono_enable_hijack_code (void);
-void mono_disable_hijack_code (void);
-void dummy_hijack_print (MonoMethod* method);
-void mono_emit_hijack_code (MonoCompile*,MonoBasicBlock*);
-void mono_hijack_init (void);
-MonoCallInst* mono_create_hijack_inst (MonoCompile*, MonoInst**);
-void mono_hijack_add_cont (void);
-
-/* Back definitions from tasklets.c because the function definitions there
- * are declared static and only accessible via an icall (which would be
- * counterproductive to use since we are on unmanaged side)
- */
-#include "tasklets.h"
-
-extern void* continuation_alloc (void);
-extern void continuation_free (MonoContinuation* cont);
-extern MonoException* continuation_mark_frame_num (MonoContinuation *, int, MonoMethod**);
-extern int continuation_store (MonoContinuation *cont, int state, MonoException **e);
-extern MonoException* continuation_restore (MonoContinuation *cont, int state);
-
-/* Method pointer is used as a key, since it *shouldn't* change in our workflow
- * it safe to use it like this. Values is the corresponding MonoContinuation struct
- */
-/*static GHashTable* hijack_continuation_storage = NULL;*/
-
-void
-mono_hijack_init ()
-{
-	/*hijack_continuation_storage = g_hash_table_new (NULL, NULL);*/
-
-	register_icall (dummy_hijack_print, "dummy_hijack_print", "void ptr", TRUE);
-	
-	mono_add_internal_call ("Heisen.RuntimeManager::mono_enable_hijack_code",
-	                        mono_enable_hijack_code);
-	mono_add_internal_call ("Heisen.RuntimeManager::mono_disable_hijack_code",
-	                        mono_disable_hijack_code);
-	/*mono_add_internal_call ("Heisen.RuntimeManager::mono_hijack_add_cont",
-	  mono_hijack_add_cont);*/
-}
-
-/*void
-mono_hijack_add_cont ()
-{
-	MonoMethod* method = NULL;
-	MonoContinuation* cont = NULL;
-	MonoException* ex = NULL;
-
-	cont = continuation_alloc ();
-	ex = continuation_mark_frame_num (cont, 4, &method);
-	if (ex != NULL)
-		mono_raise_exception (ex);
-
-	printf ("With method %s\n", method->name);
-
-	g_hash_table_insert (hijack_continuation_storage, method, cont);
-	puts ("Done adding cont");
-	}*/
-
-/* TODO: for the moment I'm using the MonoMethod passed in instance as a way to find back my
- * Scheduler method, but later on I will go back to inserting my method in crude way without
- * arg to generate as less noise as possible, watch out in that case
- */
-void
-dummy_hijack_print (MonoMethod* method)
-{
-	static MonoMethod* scheduler_method = NULL;
-
-	if (scheduler_method == NULL) {
-		MonoAssemblyName* name = mono_assembly_name_new ("HeisenLib");
-		MonoAssembly* assembly = mono_assembly_loaded (name);
-		MonoImage* image = mono_assembly_get_image (assembly);
-		MonoMethodDesc* desc = mono_method_desc_new ("Heisen.Scheduler:Yield()", TRUE);
-		scheduler_method = mono_method_desc_search_in_image (desc, image);
-		printf ("Scheduler method initialized correctly? %s\n", scheduler_method != NULL ? "Yes" : "No");
-	}
-
-	printf ("I'm in ur runtime, hijacking your JIT from %s:%s\n", (method == NULL) ? "(null)" : mono_type_get_full_name (method->klass), (method == NULL) ? "(null)" : method->name);
-	mono_runtime_invoke (scheduler_method, NULL, NULL, NULL);
-	/*MonoContinuation* cont = NULL;
-	MonoException* ex = NULL;
-	int val = 0;
-
-	if (method == NULL) {
-		puts ("Method argument is null");
-		return;
-	}
-
-	cont = g_hash_table_lookup (hijack_continuation_storage, method);
-	if (cont == NULL) {
-		puts ("Not found");
-		return;
-	}
-
-	val = continuation_store (cont, 0, &ex);
-	if (ex != NULL)
-		mono_raise_exception (ex);
-	printf ("%d, ", val + 1);
-	fflush (stdout);
-	if (val < 5)
-		ex = continuation_restore (cont, val + 1);
-		printf ("\n");*/
-
-}
-
-/*MonoCallInst*
-mono_create_hijack_inst (MonoCompile* cfg, MonoInst** arg)
-{
-	//static MonoJitICallInfo* info = NULL;
-	static MonoMethodSignature* sig = NULL;
-	MonoCallInst *call = NULL;
-	MonoInst **args = g_malloc0 (sizeof (MonoInst*));
-
-	if (info == NULL) {
-		info = mono_find_jit_icall_by_name ("dummy_hijack_print");
-		}
-	
-	if (sig == NULL) {
-		sig = mono_metadata_signature_alloc (mono_defaults.corlib, 1);
-		sig->ret = mono_class_get_type (mono_defaults.void_class);
-		sig->hasthis = 0;
-	}
-
-	NEW_PCONST (cfg, args[0], foo_hijack);
-	(*arg) = args[0];
-	//MONO_ADD_INS ((cfg)->cbb, (dest));
-	MONO_INST_NEW_CALL (cfg, call, OP_VOIDCALL);
-	
-	call->args = args;
-	call->signature = sig;
-	call->inst.type = STACK_INV;
-	call->fptr = dummy_hijack_print;
-	
-	cfg->param_area = MAX (cfg->param_area, call->stack_usage);
-	cfg->flags |= MONO_CFG_HAS_CALLS;
-
-	return call;
-}
-
-void
-mono_emit_hijack_code (MonoCompile *cfg, MonoBasicBlock* bb)
-{
-	MonoInst* ins;
-	MonoCallInst* call = NULL;
-	MonoInst* arg = NULL;
-
-	// Skip corlib for now and avoid problems
-	if (cfg->method->klass->image == mono_defaults.corlib)
-		return;
-
-	// Insert a simple call to a print func
-	MONO_BB_FOR_EACH_INS (bb, ins) {
-		call = mono_create_hijack_inst (cfg, &arg);
-		mono_bblock_insert_before_ins (bb, ins, (MonoInst*)call);
-		mono_bblock_insert_before_ins (bb, (MonoInst*)call, arg);
-	}
-
-	// Victory ?
-}*/
 
 void
 mono_codegen (MonoCompile *cfg)
