@@ -2230,7 +2230,6 @@ int mono_is_hijacking_enabled (void);
 void mono_enable_hijack_code (void);
 void mono_disable_hijack_code (void);
 
-void hijack_func (void);
 void mono_emit_hijack_code (MonoCompile*);
 
 void mono_hijack_init (void);
