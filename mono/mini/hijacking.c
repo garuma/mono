@@ -107,7 +107,8 @@ typedef struct {
 extern void register_icall (gpointer func, const char *name, const char *sigstr, gboolean save);
 
 static int hijacking = FALSE;
-static int total_num_method;
+static int total_num_method = 0;
+static int current_num_method = 0;
 
 /* Method pointer is used as a key, since it *shouldn't* change in our workflow
  * it safe to use it like this. Values is a struct containing interesting values
@@ -274,7 +275,7 @@ hijack_func (HijackMethodInfo* method)
 
 	if (scheduler_yield_method == NULL) {
 		/* Find Scheduler.Yield static method */
-		MonoAssemblyName* name = mono_assembly_name_new ("HeisenLib");
+		MonoAssemblyName* name = mono_assembly_name_new ("Heisen");
 		MonoAssembly* assembly = mono_assembly_loaded (name);
 		MonoImage* image = mono_assembly_get_image (assembly);
 		MonoMethodDesc* yield_desc = mono_method_desc_new ("Heisen.Scheduler:Yield()", TRUE);
@@ -361,9 +362,6 @@ mono_emit_hijack_code (MonoCompile *cfg)
 
 	if (g_str_has_prefix (full_name, "Mono"))
 		return;
-
-	/*puts (cfg->method->name);
-	  fflush (stdout);*/
 
 	if (!(methodinfo = g_hash_table_lookup (hijack_methodinfos_storage, cfg->method))) {
 		methodinfo = g_new0 (HijackMethodInfo, 1);
