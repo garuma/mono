@@ -99,23 +99,47 @@ typedef struct {
 	int number_injected_calls;
 	/* GList<HijackExecutionSlot*> */
 	GList* execution_slots;
+	/* These fields are changed during the execution of the method */
 	GList* current_execution_slot;
 	HijackExecutionSlot* current_slot;
+	int current_num_method; /* Used as an index to tell where the method is in the interleaving call chain */
+	int current_call_number;
 } HijackMethodInfo;
 
+typedef struct {
+	GList* c_execution_slot;
+	HijackExecutionSlot* c_slot;
+	int c_num_method;
+	int c_call_number;
+} HijackMethodInfoSave;
+
+#define SAVE_CONTEXT(save, method) \
+	save.c_slot = method->current_slot; \
+	save.c_execution_slot = method->current_execution_slot; \
+	save.c_num_method = method->current_num_method; \
+	save.c_call_number = method->current_call_number; \
+	method->current_execution_slot = NULL; \
+	method->current_slot = NULL; \
+
+#define RESTORE_CONTEXT(save, method) \
+	method->current_slot = save.c_slot; \
+	method->current_execution_slot = save.c_execution_slot; \
+	method->current_num_method = save.c_num_method; \
+	method->current_call_number = save.c_call_number;
 
 extern void register_icall (gpointer func, const char *name, const char *sigstr, gboolean save);
 
 static int hijacking = FALSE;
 static int total_num_method = 0;
-static int current_num_method = 0;
+static MonoMethod* scheduler_yield_method = NULL;
+static MonoMethod* scheduler_stop_method = NULL;
+static int current_num_method_cache = 0;
 
 /* Method pointer is used as a key, since it *shouldn't* change in our workflow
- * it safe to use it like this. Values is a struct containing interesting values
- * later used to generate the interleavings scheme we want.
+ * it is safe to use it like this. Values is a struct containing interesting 
+ * values later used to generate the interleavings scheme we want.
  */
 static GHashTable* hijack_methodinfos_storage = NULL;
-
 
 int
 mono_is_hijacking_enabled ()
@@ -159,7 +183,7 @@ internal_iterator_method (gpointer key, gpointer value, gpointer user_data)
 }
 
 static void
-mono_hijack_print_current_interleaving ()
+mono_hijack_print_current_interleaving (void)
 {
 	g_hash_table_foreach (hijack_methodinfos_storage, internal_iterator_method, NULL);
 }
@@ -227,52 +251,66 @@ mono_hijack_generate_interleavings (HijackMethodInfo* methodinfo)
 	fflush (stdout);
 }
 
-/*static void
-mono_hijack_generate_interleavings (HijackMethodInfo* methodinfo)
-{
-	int num_injected = methodinfo->number_injected_calls;
-	HijackExecutionSlot* slot = NULL, *other = NULL;
-	int i = 0;
-
-	for (i = 1; num_injected > 0; ++i) {
-		slot = g_new0 (HijackExecutionSlot, 1);
-		slot->no_yielding_count = MIN (i, num_injected);
-		num_injected = MAX (0, num_injected - i);
-
-		if (methodinfo->execution_slots == NULL) {
-			methodinfo->execution_slots = slot;
-		} else {
-			other = methodinfo->execution_slots;
-			while (other->next != NULL)
-				other = other->next;
-
-			other->next = slot;
-		}
-	}
-	}*/
-
- /*static void print_hijack_execution_slot (HijackExecutionSlot* slot)
-{
-	int i = 0;
-	
-	while (slot != NULL) {
-		for (i = 0; i < slot->no_yielding_count; i++)
-			printf ("*");
-
-		if (slot->next != NULL)
-			printf ("-");
-		slot = slot->next;
-	}
-	puts ("");
-	}*/
-
 static void
 hijack_func (HijackMethodInfo* method)
 {
-	static MonoMethod* scheduler_yield_method = NULL;
-	static MonoMethod* scheduler_stop_method = NULL;
 	HijackExecutionSlot* slot = NULL;
+	HijackMethodInfoSave save;
 
+	//puts (method->name);
+
+	/* First pass in the hijack_func method, we initialize the GList traversal pointer */
+	if (method->current_execution_slot == NULL) {
+		slot = method->current_slot = (method->current_execution_slot = method->execution_slots)->data;
+	/* We have finished the current interleaving description, time to get a new one (or go back at the beginning) */
+	} else if (method->current_slot == NULL) {
+		/* If our method has been called sufficiently depending on its place in the call chain then change interleaving */
+		if (current_num_method_cache - method->current_num_method <= ++method->current_call_number) {
+			method->current_call_number = 0;
+			method->current_execution_slot = g_list_next (method->current_execution_slot);
+			/* No more interleaving for us? If we are the master executing method it means the test is finished
+			 * if not we go back at the beginning, it simply means we are at the end of this call chain interleaving
+			 */
+			if (method->current_execution_slot == NULL) {
+				if (method->current_num_method == 0) {
+					mono_runtime_invoke (scheduler_stop_method, NULL, NULL, NULL);
+					return;
+				} else {
+					method->current_execution_slot = method->execution_slots;
+				}
+			}
+		}
+
+		/* In all case we set back current_slot to a correct value at some start of an execution slot */
+		slot = method->current_slot = method->current_execution_slot->data;
+	} else {
+		slot = method->current_slot;
+	}
+
+	g_return_if_fail (slot != NULL);
+
+	if (!slot->no_yielding_count) {
+		method->current_slot = slot->next;
+		/* We save our current progress into a special save variable on the stack
+		 * and reset the methodinfos so that if after yielding we end up executing
+		 * the same method (think [HeisenTestMethod(Duplicate=2)]) the second invocation
+		 * will think it's the first and init itself correctly. When the call to Yield
+		 * return, we restore the state from our save
+		 */
+		SAVE_CONTEXT (save, method);
+		mono_runtime_invoke (scheduler_yield_method, NULL, NULL, NULL);
+		RESTORE_CONTEXT (save, method);
+	} else {
+		slot->no_yielding_count--;
+	}
+}
+
+/* Only run once at the beginning each the specific method is executed, allow to execute a bunch
+ * of initialization, cleanup, saving actions
+ */
+static void
+hijack_func_first (HijackMethodInfo* method)
+{
 	if (scheduler_yield_method == NULL) {
 		/* Find Scheduler.Yield static method */
 		MonoAssemblyName* name = mono_assembly_name_new ("Heisen");
@@ -282,47 +320,19 @@ hijack_func (HijackMethodInfo* method)
 		MonoMethodDesc* stop_desc = mono_method_desc_new ("Heisen.Scheduler:Stop()", TRUE);
 		scheduler_yield_method = mono_method_desc_search_in_image (yield_desc, image);
 		scheduler_stop_method = mono_method_desc_search_in_image (stop_desc, image);
-		printf ("Scheduler method initialized correctly? %s %s\n",
-		        scheduler_yield_method != NULL ? "Yes" : "No",
-		        scheduler_stop_method != NULL ? "Yes" : "No");
+		if (scheduler_yield_method == NULL || scheduler_stop_method == NULL)
+			printf ("Scheduler method initialized correctly? %s %s\n",
+			        scheduler_yield_method != NULL ? "Yes" : "No",
+			        scheduler_stop_method != NULL ? "Yes" : "No");
 	}
 
 	if (method->execution_slots == NULL)
 		mono_hijack_generate_interleavings (method);
 
-	if (method->current_execution_slot == NULL) {
-		slot = method->current_slot = (method->current_execution_slot = method->execution_slots)->data;
-	} else if (method->current_slot == NULL) {
-		//puts ("Changing");
-		method->current_execution_slot = g_list_next (method->current_execution_slot);
-		if (method->current_execution_slot == NULL) {
-			//puts ("Stopping");
-			mono_runtime_invoke (scheduler_stop_method, NULL, NULL, NULL);
-			return;
-		}
-		slot = method->current_slot = method->current_execution_slot->data;
-	} else {
-		slot = method->current_slot;
-	}
+	method->current_num_method = current_num_method_cache++;
+	method->current_call_number = 0;
 
-	if (slot == NULL) {
-		puts ("Hu?");
-		return;
-	}
-
-	/*printf ("Method %s ", method->name);
-	  print_hijack_execution_slot (slot);*/
-
-	if (!slot->no_yielding_count) {
-		method->current_slot = slot->next;
-		//g_free (slot);
-		//puts ("Yielding");
-		mono_runtime_invoke (scheduler_yield_method, NULL, NULL, NULL);
-	} else {
-		slot->no_yielding_count--;
-	}
-
-	//printf ("Method %s, no_yielding_count is %d\n", method->name, slot->no_yielding_count);
+	hijack_func (method);
 }
 
 void
@@ -331,6 +341,7 @@ mono_hijack_init ()
 	hijack_methodinfos_storage = g_hash_table_new (NULL, NULL);
 
 	register_icall (hijack_func, "hijack_func", "void ptr", TRUE);
+	register_icall (hijack_func_first, "hijack_func_first", "void ptr", TRUE);
 	
 	mono_add_internal_call ("Heisen.RuntimeManager::mono_enable_hijack_code",
 	                        mono_enable_hijack_code);
@@ -368,12 +379,15 @@ mono_emit_hijack_code (MonoCompile *cfg)
 		methodinfo->number_injected_calls = 1;
 		methodinfo->name = cfg->method->name;
 		g_hash_table_insert (hijack_methodinfos_storage, cfg->method, methodinfo);
+
+		EMIT_NEW_PCONST (cfg, arg[0], methodinfo);
+		mono_emit_jit_icall (cfg, hijack_func_first, arg);
 	} else {
 		methodinfo->number_injected_calls++;
-	}
 
-	EMIT_NEW_PCONST (cfg, arg[0], methodinfo);
-	mono_emit_jit_icall (cfg, hijack_func, arg);
+		EMIT_NEW_PCONST (cfg, arg[0], methodinfo);
+		mono_emit_jit_icall (cfg, hijack_func, arg);
+	}
 }
 
 
