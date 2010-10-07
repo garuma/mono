@@ -177,6 +177,12 @@ gchar*           g_win32_getlocale(void);
  * Hashtables
  */
 typedef struct _GHashTable GHashTable;
+typedef struct {
+	GHashTable* hash_table;
+	void* slot;
+	int i;
+} GHashTableIter;
+
 typedef void     (*GFunc)          (gpointer data, gpointer user_data);
 typedef gint     (*GCompareFunc)   (gconstpointer a, gconstpointer b);
 typedef gint     (*GCompareDataFunc) (gconstpointer a, gconstpointer b, gpointer user_data);
@@ -195,6 +201,8 @@ guint           g_hash_table_size            (GHashTable *hash);
 gpointer        g_hash_table_lookup          (GHashTable *hash, gconstpointer key);
 gboolean        g_hash_table_lookup_extended (GHashTable *hash, gconstpointer key, gpointer *orig_key, gpointer *value);
 void            g_hash_table_foreach         (GHashTable *hash, GHFunc func, gpointer user_data);
+void            g_hash_table_iter_init       (GHashTableIter *iter, GHashTable *hash_table);
+gboolean        g_hash_table_iter_next       (GHashTableIter *iter, gpointer *key, gpointer *value);
 gpointer        g_hash_table_find            (GHashTable *hash, GHRFunc predicate, gpointer user_data);
 gboolean        g_hash_table_remove          (GHashTable *hash, gconstpointer key);
 void            g_hash_table_remove_all      (GHashTable *hash);

@@ -316,6 +316,41 @@ g_hash_table_foreach (GHashTable *hash, GHFunc func, gpointer user_data)
 	}
 }
 
+void
+g_hash_table_iter_init (GHashTableIter *iter, GHashTable *hash_table)
+{
+	g_return_if_fail (iter != NULL);
+	g_return_if_fail (hash_table != NULL);
+
+	iter->slot = NULL;
+	iter->i = 0;
+	iter->hash_table = hash_table;
+}
+
+gboolean
+g_hash_table_iter_next (GHashTableIter *iter, gpointer *key, gpointer *value)
+{
+	Slot *s = NULL;
+
+	g_return_val_if_fail (iter != NULL, FALSE);
+
+	while (s == NULL) {
+		if (iter->i >= iter->hash_table->table_size)
+			return FALSE;
+
+		s = iter->slot == NULL ? (iter->slot = iter->hash_table->table [iter->i++]) : iter->slot;
+	}
+
+	if (key != NULL)
+		*key = s->key;
+	if (value != NULL)
+		*value = s->value;
+
+	iter->slot = s->next;
+
+	return TRUE;
+}
+
 gpointer
 g_hash_table_find (GHashTable *hash, GHRFunc predicate, gpointer user_data)
 {
