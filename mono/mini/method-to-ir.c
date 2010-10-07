@@ -5895,6 +5895,10 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 		if (cfg->verbose_level > 3)
 			printf ("converting (in B%d: stack: %d) %s", bblock->block_num, (int)(sp - stack_start), mono_disasm_code_one (NULL, method, ip, NULL));
 
+		if (mono_is_hijacking_enabled ())
+			//if ((hijacking = (getenv ("MONO_HIJACKING") != NULL)))
+			mono_emit_hijack_code (cfg);
+
 		switch (*ip) {
 		case CEE_NOP:
 			if (cfg->keep_cil_nops)
@@ -10027,10 +10031,6 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 			g_warning ("opcode 0x%02x not handled", *ip);
 			UNVERIFIED;
 		}
-
-		if (mono_is_hijacking_enabled ())
-			//if ((hijacking = (getenv ("MONO_HIJACKING") != NULL)))
-				mono_emit_hijack_code (cfg);
 	}
 	if (start_new_bblock != 1)
 		UNVERIFIED;
