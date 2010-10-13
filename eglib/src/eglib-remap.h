@@ -180,6 +180,7 @@
 #define g_string_new monoeg_g_string_new
 #define g_string_new_len monoeg_g_string_new_len
 #define g_string_prepend monoeg_g_string_prepend
+#define g_string_prepend_c monoeg_g_string_prepend_c
 #define g_string_printf monoeg_g_string_printf
 #define g_string_sized_new monoeg_g_string_sized_new
 #define g_string_truncate monoeg_g_string_truncate

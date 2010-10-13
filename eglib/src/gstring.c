@@ -145,6 +145,20 @@ g_string_prepend (GString *string, const gchar *val)
 	GROW_IF_NECESSARY(string, len);	
 	memmove(string->str + len, string->str, string->len + 1);
 	memcpy(string->str, val, len);
+	string->len += len;
+
+	return string;
+}
+
+GString*
+g_string_prepend_c (GString *string, gchar c)
+{
+	g_return_val_if_fail (string != NULL, string);
+
+	GROW_IF_NECESSARY(string, 1);
+	memmove (string->str + 1, string->str, string->len + 1);
+	string->str[0] = c;
+	string->len++;
 
 	return string;
 }

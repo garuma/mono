@@ -157,6 +157,8 @@ test_prepend ()
 
 	if (strcmp (s->str, "onedingus") != 0)
 		return FAILED ("Failed, expected onedingus, got [%s]", s->str);
+	if (s->len != 9)
+		return FAILED ("Failed, expected 9, got [%d]", s->len);
 
 	g_string_free (s, TRUE);
 
@@ -165,6 +167,8 @@ test_prepend ()
 	g_string_prepend (s, "one");
 	if (strcmp (s->str, "one") != 0)
 		return FAILED ("Got erroneous result, expected [one] got [%s]", s->str);
+	if (s->len != 3)
+		return FAILED ("Failed, expected 3, got [%d]", s->len);
 	g_string_free (s, TRUE);
 
 	/* This is to force the path where things fit */
@@ -172,13 +176,44 @@ test_prepend ()
 	g_string_truncate (s, 1);
 	if (strcmp (s->str, "1") != 0)
 		return FAILED ("Expected [1] string, got [%s]", s->str);
+	if (s->len != 1)
+		return FAILED ("Failed, expected 1, got [%d]", s->len);
 
 	g_string_prepend (s, "pre");
 	if (strcmp (s->str, "pre1") != 0)
 		return FAILED ("Expected [pre1], got [%s]", s->str);
+	if (s->len != 4)
+		return FAILED ("Failed, expected 4, got [%d]", s->len);
 	g_string_free (s, TRUE);
 	
 	return NULL;
+}
+
+RESULT
+test_prepend_c ()
+{
+	GString *s = g_string_new("");
+	gint i;
+
+	for(i = 0; i < 1024; i++) {
+		g_string_prepend_c(s, 'y');
+	}
+
+	if(strlen(s->str) != 1024) {
+		return FAILED("Incorrect string size, got: %s %d", s->str,
+			strlen(s->str));
+	}
+
+	g_string_free(s, TRUE);
+
+	s = g_string_new ("foo");
+	for (i = 0; i < 10; i++)
+		g_string_prepend_c (s, 'f');
+	if (strcmp (s->str, "fffffffffffoo") != 0) {
+		return FAILED("Incorrect string, got: %s", s->str);
+	}
+
+	return OK;
 }
 
 RESULT
@@ -229,6 +264,7 @@ static Test string_tests [] = {
 	{"ctor+sized", test_sized },
 	{"truncate", test_truncate },
 	{"prepend", test_prepend },
+	{"prepend_c", test_prepend_c },
 	{"append_len", test_appendlen },
 	{"macros", test_macros },
 	{NULL, NULL}

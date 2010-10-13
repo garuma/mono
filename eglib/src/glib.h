@@ -330,6 +330,7 @@ GString     *g_string_append        (GString *string, const gchar *val);
 GString     *g_string_append_len    (GString *string, const gchar *val, gssize len);
 GString     *g_string_truncate      (GString *string, gsize len);
 GString     *g_string_prepend       (GString *string, const gchar *val);
+GString     *g_string_prepend_c     (GString *string, gchar c);
 
 #define g_string_sprintfa g_string_append_printf
 
