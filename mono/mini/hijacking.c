@@ -32,6 +32,7 @@
 #include <mono/metadata/marshal.h>
 #include <mono/metadata/debug-helpers.h>
 #include <mono/metadata/mono-debug.h>
+#include <mono/metadata/debug-mono-symfile.h>
 #include <mono/metadata/gc-internal.h>
 #include <mono/metadata/security-manager.h>
 #include <mono/metadata/threads-types.h>
@@ -83,9 +84,10 @@ typedef struct _HijackInterleaving {
 } HijackInterleaving;
 
 typedef struct {
-	const char* name;
+	MonoMethod* mono_method;
 	int number_injected_calls;
 	int number_interleaving;
+	GArray* il_offsets;
 
 	/* GList<HijackInterleaving*>[] - array keyed by number of yield point to a list of interleavings */
 	GList** execution_slots;
@@ -114,7 +116,7 @@ typedef struct {
 	save.c_call_number = method->current_call_number; \
 	save.c_neighbours_interleaving_count = method->current_neighbours_interleaving_count; \
 	method->current_execution_slot = NULL; \
-	method->current_interleaving = NULL; \
+	method->current_interleaving = NULL;
 
 #define RESTORE_CONTEXT(save, method) \
 	method->current_interleaving = save.c_slot; \
@@ -138,6 +140,17 @@ static int current_method_yield_points = 0;
  */
 static GHashTable* hijack_methodinfos_storage = NULL;
 
+/* Track all the method infos that have been created and store them in a 
+ * LIFO manner
+ */
+static GList* method_infos = NULL;
+
+/* Maintain a list of the successive execution of method infos. Every method adds itself
+ * there when its execution is started or resumed
+ */
+/* GList<HijackMethodInfo*> */
+static GList* method_execution_flow = NULL;
+
 int
 mono_is_hijacking_enabled ()
 {
@@ -155,6 +168,10 @@ mono_hijack_set_num_methods (int num_method)
 {
 	total_num_method = num_method;
 	current_num_method_cache = 0;
+	if (method_execution_flow != NULL) {
+		g_list_free (method_execution_flow);
+		method_execution_flow = NULL;
+	}
 }
 
 void
@@ -165,20 +182,212 @@ mono_disable_hijack_code ()
 
 #define DUMP_INTERLEAVING(s) while (s != NULL) { printf ("%d", s->initial_count); if (s->next != NULL) printf ("-"); s = s->next; }
 
-static void
-internal_iterator_method (gpointer key, gpointer value, gpointer user_data)
+typedef struct {
+	GString* code;
+	gchar node_letter;
+	guint node_id;
+	GList** yield_ids;
+} DotCode;
+
+static DotCode*
+mono_dot_code_new (void)
 {
-	HijackMethodInfo* method = (HijackMethodInfo*)value;
+	DotCode* dotcode = g_new0 (DotCode, 1);
+	dotcode->node_letter = 'a';
+	dotcode->code = g_string_new (NULL);
+	dotcode->yield_ids = g_new0 (GList*, total_num_method);
+
+	return dotcode;
+}
+
+static void
+mono_dot_code_free (DotCode* dotcode)
+{
+	int i = 0;
+
+	if (dotcode == NULL)
+		return;
+	if (dotcode->code)
+		g_string_free (dotcode->code, TRUE);
+
+	for (i = 0; i < total_num_method; i++)
+		g_list_free (dotcode->yield_ids[i]);
+
+	g_free (dotcode->yield_ids);
+
+	g_free (dotcode);
+}
+
+/* From c1num1 to c2num2 */
+static void
+add_yield_link (DotCode* dcode, gchar c1, gchar c2, guint num1, guint num2)
+{
+	g_string_append_printf (dcode->code, "%c%u -> %c%u;\n", c1, num1, c2, num2);
+}
+
+#define MINFO(n) ((HijackMethodInfo*)(n->data))
+#define g_list_pop(list) list = g_list_delete_link (list, list);
+
+static void
+end_graph (DotCode* dcode)
+{
+	gchar c = 'a';
+	GList* execution_node = method_execution_flow;
+	guint id1 = 0, id2 = 0, i = 0;
+
+	g_string_prepend (dcode->code, "}\n");
+	for (; c < dcode->node_letter; c += 1) {
+		g_string_prepend (dcode->code, "0;\n");
+		g_string_prepend_c (dcode->code, c);
+	}
+
+	puts ("//BEGIN execution flow");
+	while (execution_node != NULL) {
+		puts (MINFO(execution_node)->mono_method->name);
+
+		execution_node = g_list_next (execution_node);
+	}
+	for (i = 0; i < total_num_method; i++)
+		printf ("%d ", g_list_length (dcode->yield_ids[i]));
+	puts ("");
+	puts ("//END");
+
+	execution_node = method_execution_flow;
+	i = MINFO (execution_node)->current_num_method;
+	g_list_pop (dcode->yield_ids[i]);
+
+	while (execution_node != NULL && g_list_next (execution_node) != NULL) {
+		i = MINFO(execution_node)->current_num_method;
+		printf ("%d %u\n", i, total_num_method);
+		id1 = GPOINTER_TO_INT (dcode->yield_ids [i]->data);
+		g_list_pop (dcode->yield_ids [i]);
+
+		i = MINFO(g_list_next (execution_node))->current_num_method;
+		id2 = GPOINTER_TO_INT (dcode->yield_ids [i]->data);
+		g_list_pop (dcode->yield_ids [i]);
+
+		add_yield_link (dcode,
+		                'a' + MINFO(g_list_next (execution_node))->current_num_method,
+		                'a' + MINFO(execution_node)->current_num_method,
+		                id2, id1);
+
+		execution_node = g_list_delete_link (execution_node, execution_node);
+	}
+
+	g_string_prepend (dcode->code, "digraph G {\n{\nrank = same;\n");
+	g_string_append (dcode->code, "\n}\n");
+}
+
+/*#define begin_rank(_dcode, _lcounter) g_string_append_printf (_dcode->ranks, "{\nrank = same;\nl%d [shape = plaintext];\n")
+#define add_to_rank(_dcode, _char, _num) g_string_append_printf (_dcode->ranks, "%c%u;\n", _char, _num)
+#define end_rank(_dcode) g_string_append (_dcode->ranks, "}\n")*/
+
+#define add_item(_dcode, _char, _num, _il, _line) g_string_append_printf (_dcode->code, "%c%u [label = \"IL %#04x\\nline %u\"];\n", _char, _num, _il, _line)
+
+static void
+add_link (DotCode* dcode, gchar c, guint num1, guint num2, gboolean directed)
+{
+	g_string_append_printf (dcode->code, "%c%u -> %c%u [weight = 10.0", c, num1, c, num2);
+	if (!directed)
+		g_string_append (dcode->code, ", arrowhead = none, color=grey, penwidth=0.8];\n");
+	else
+		g_string_append (dcode->code, "];\n");
+}
+
+#define add_method_name(_dcode, _name, _char, _first) g_string_append_printf (_dcode->code, "\"%s\" [label = \"%s\", labeljust = l, shape = none];\n\"%s\" -> %c0 [style = dotted%s];\n", _name, _name, _name, _char, _first ? "" : ",arrowhead = none")
+
+static void
+internal_iterator_method (gpointer data, gpointer user_data)
+{
+	HijackMethodInfo* method = (HijackMethodInfo*)data;
 	HijackInterleaving* slot = method->current_execution_slot->data;
+	MonoDebugMethodInfo* mdebug = mono_debug_lookup_method (method->mono_method);
+	guint offset = 0, accumulator = 0, i = 0;
+	MonoDebugSourceLocation *location;
+	DotCode* dotcode = user_data;
 	
+	printf ("Method %s interleaving: ", method->mono_method->name);
+
 	DUMP_INTERLEAVING (slot);
 	puts ("");
+
+	if (mdebug == NULL)
+		return;
+
+	add_method_name (dotcode, method->mono_method->name, dotcode->node_letter, method->current_num_method == 0);
+
+	puts ("Yielding summary:");
+	slot = method->current_execution_slot->data;
+	while (slot != NULL && slot->next != NULL) {
+		offset = g_array_index (method->il_offsets, guint, (accumulator += slot->initial_count));
+
+		location = mono_debug_symfile_lookup_location (mdebug, offset);
+		if (location == NULL)
+			continue;
+
+		printf ("%s:%d (IL offset: %#04x, original offset: %u)\n",
+		        location->source_file,
+		        location->row,
+		        location->il_offset,
+		        offset);
+
+		slot = slot->next;
+	}
+
+	slot = method->current_execution_slot->data;
+	accumulator = 0;
+
+	while (slot != NULL) {
+		accumulator += slot->initial_count;
+		for (i = accumulator - slot->initial_count; i < accumulator; i++) {
+			offset = g_array_index (method->il_offsets, guint, i);
+			location = mono_debug_symfile_lookup_location (mdebug, offset);
+			if (location == NULL) {
+				puts ("No debug infos");
+				continue;
+			}
+			add_item(dotcode, dotcode->node_letter, dotcode->node_id++, location->il_offset, location->row);
+
+			if (dotcode->node_id > 1) {
+				if (i != accumulator - slot->initial_count) {
+					add_link (dotcode, dotcode->node_letter, dotcode->node_id - 2, dotcode->node_id - 1, TRUE);
+				} else {
+					add_link (dotcode, dotcode->node_letter, dotcode->node_id - 2, dotcode->node_id - 1, FALSE);
+					dotcode->yield_ids[method->current_num_method] = g_list_prepend (dotcode->yield_ids[method->current_num_method], GINT_TO_POINTER (dotcode->node_id - 2));
+					dotcode->yield_ids[method->current_num_method] = g_list_prepend (dotcode->yield_ids[method->current_num_method], GINT_TO_POINTER (dotcode->node_id - 1));
+				}
+			}
+		}
+
+		if (slot->next == NULL) {
+			dotcode->yield_ids[method->current_num_method] = g_list_prepend (dotcode->yield_ids[method->current_num_method], GINT_TO_POINTER (dotcode->node_id - 1));
+		}
+
+		slot = slot->next;
+	}
+	dotcode->yield_ids[method->current_num_method] = g_list_append (dotcode->yield_ids[method->current_num_method], GINT_TO_POINTER (0));
+
+	puts("");
+
+	dotcode->node_letter++;
+	dotcode->node_id = 0;
 }
 
 static void
 mono_hijack_print_current_interleaving (void)
 {
-	g_hash_table_foreach (hijack_methodinfos_storage, internal_iterator_method, NULL);
+	DotCode* dotcode = mono_dot_code_new ();
+	FILE* file = fopen ("result.dot", "w");
+
+	method_infos = g_list_reverse (method_infos);
+	g_list_foreach (method_infos, internal_iterator_method, dotcode);
+	end_graph (dotcode);
+
+	fputs (dotcode->code->str, file);
+	fflush (file);
+	fclose (file);
+
+	mono_dot_code_free (dotcode);
 }
 
 static HijackInterleaving*
@@ -293,6 +502,8 @@ hijack_func (HijackMethodInfo* m)
 		SAVE_CONTEXT (save, m);
 		mono_runtime_invoke (scheduler_yield_method, NULL, NULL, NULL);
 		RESTORE_CONTEXT (save, m);
+		/* Got waked up, so we add ourselves to method_execution_flow */
+		method_execution_flow = g_list_prepend (method_execution_flow, m);
 	} else {
 		slot->no_yielding_count--;
 	}
@@ -349,6 +560,8 @@ hijack_func_first (HijackMethodInfo* m)
 	if (m->current_num_method == -1)
 		m->current_num_method = current_num_method_cache++;
 
+	method_execution_flow = g_list_prepend (method_execution_flow, m);
+
 	/* First pass in the hijack_func method, we initialize the GList traversal pointer */
 	if (m->current_execution_slot == NULL) {
 		m->current_interleaving = (m->current_execution_slot = m->execution_slots[current_method_yield_points])->data;
@@ -379,13 +592,13 @@ hijack_func_first (HijackMethodInfo* m)
 			}
 		}
 
-		//printf ("Going with following execution slot for %s(%d)\n", m->name, m->current_num_method);
+		//printf ("Going with following execution slot for %s(%d)\n", m->mono_method->name, m->current_num_method);
 		//internal_iterator_method (NULL, m, NULL);
 		/* In all case we set back current_interleaving to a correct value at some start of an execution slot */
 		m->current_interleaving = m->current_execution_slot->data;
 	}
 
-	/*printf ("Going with following execution slot for %s(%d)\n", m->name, m->current_num_method);
+	/*printf ("Going with following execution slot for %s(%d)\n", m->mono_method->name, m->current_num_method);
 	  internal_iterator_method (NULL, m, NULL);*/
 
 	hijack_func (m);
@@ -433,9 +646,11 @@ mono_emit_hijack_code (MonoCompile *cfg)
 	if (!(methodinfo = g_hash_table_lookup (hijack_methodinfos_storage, cfg->method))) {
 		methodinfo = g_new0 (HijackMethodInfo, 1);
 		methodinfo->number_injected_calls = 1;
-		methodinfo->name = cfg->method->name;
+		methodinfo->mono_method = cfg->method;
 		methodinfo->current_num_method = -1;
+		methodinfo->il_offsets = g_array_new (FALSE, TRUE, sizeof (guint));
 		g_hash_table_insert (hijack_methodinfos_storage, cfg->method, methodinfo);
+		method_infos = g_list_prepend (method_infos, methodinfo);
 
 		EMIT_NEW_PCONST (cfg, arg[0], methodinfo);
 		mono_emit_jit_icall (cfg, hijack_func_first, arg);
@@ -445,5 +660,7 @@ mono_emit_hijack_code (MonoCompile *cfg)
 		EMIT_NEW_PCONST (cfg, arg[0], methodinfo);
 		mono_emit_jit_icall (cfg, hijack_func, arg);
 	}
+
+	g_array_append_val (methodinfo->il_offsets, cfg->real_offset);
 }
 
