@@ -53,6 +53,8 @@
 #define g_hash_table_size monoeg_g_hash_table_size
 #define g_hash_table_print_stats monoeg_g_hash_table_print_stats
 #define g_hash_table_remove_all monoeg_g_hash_table_remove_all
+#define g_hash_table_iter_init monoeg_g_hash_table_iter_init
+#define g_hash_table_iter_next monoeg_g_hash_table_iter_next
 #define g_int_equal monoeg_g_int_equal
 #define g_int_hash monoeg_g_int_hash
 #define g_list_alloc monoeg_g_list_alloc
