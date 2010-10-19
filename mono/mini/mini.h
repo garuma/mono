@@ -2231,6 +2231,8 @@ void mono_enable_hijack_code (void);
 void mono_disable_hijack_code (void);
 
 void mono_emit_hijack_code (MonoCompile*);
+void mono_emit_hijack_branch_code (MonoCompile*, gint offset);
+void mono_emit_hijack_end_branch_code (MonoCompile*);
 
 void mono_hijack_init (void);
 

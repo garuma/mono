@@ -5899,6 +5899,9 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 			//if ((hijacking = (getenv ("MONO_HIJACKING") != NULL)))
 			mono_emit_hijack_code (cfg);
 
+#define EMIT_HIJACK_BRANCH(__target) if (mono_is_hijacking_enabled ()) mono_emit_hijack_branch_code (cfg, (__target - header->code))
+#define EMIT_END_HIJACK_BRANCH if (mono_is_hijacking_enabled ()) mono_emit_hijack_end_branch_code (cfg)
+
 		switch (*ip) {
 		case CEE_NOP:
 			if (cfg->keep_cil_nops)
@@ -6951,6 +6954,7 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 			ip++;
 			target = ip + 1 + (signed char)(*ip);
 			++ip;
+			EMIT_HIJACK_BRANCH(target);
 			GET_BBLOCK (cfg, tblock, target);
 			link_bblock (cfg, bblock, tblock);
 			ins->inst_target_bb = tblock;
@@ -6960,6 +6964,7 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 				CHECK_UNVERIFIABLE (cfg);
 			}
 			MONO_ADD_INS (bblock, ins);
+			EMIT_END_HIJACK_BRANCH;
 			start_new_bblock = 1;
 			inline_costs += BRANCH_COST;
 			break;
@@ -6979,9 +6984,10 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 			ip++;
 			target = ip + 1 + *(signed char*)ip;
 			ip++;
+			EMIT_HIJACK_BRANCH(target);
 
 			ADD_BINCOND (NULL);
-
+			EMIT_END_HIJACK_BRANCH;
 			sp = stack_start;
 			inline_costs += BRANCH_COST;
 			break;
@@ -6992,6 +6998,7 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 
 			target = ip + 4 + (gint32)read32(ip);
 			ip += 4;
+			EMIT_HIJACK_BRANCH(target);
 			GET_BBLOCK (cfg, tblock, target);
 			link_bblock (cfg, bblock, tblock);
 			ins->inst_target_bb = tblock;
@@ -7002,6 +7009,7 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 			}
 
 			MONO_ADD_INS (bblock, ins);
+			EMIT_END_HIJACK_BRANCH;
 
 			start_new_bblock = 1;
 			inline_costs += BRANCH_COST;
@@ -7022,6 +7030,7 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 			ip ++;
 			target = ip + opsize + (is_short ? *(signed char*)ip : (gint32)read32(ip));
 			ip += opsize;
+			EMIT_HIJACK_BRANCH(target);
 
 			sp--;
 
@@ -7063,6 +7072,7 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 			GET_BBLOCK (cfg, tblock, ip);
 			ins->inst_false_bb = tblock;
 			start_new_bblock = 2;
+			EMIT_END_HIJACK_BRANCH;
 
 			sp = stack_start;
 			inline_costs += BRANCH_COST;
@@ -7084,9 +7094,11 @@ mono_method_to_ir (MonoCompile *cfg, MonoMethod *method, MonoBasicBlock *start_b
 			ip++;
 			target = ip + 4 + (gint32)read32(ip);
 			ip += 4;
+			EMIT_HIJACK_BRANCH(target);
 
 			ADD_BINCOND (NULL);
 
+			EMIT_END_HIJACK_BRANCH;
 			sp = stack_start;
 			inline_costs += BRANCH_COST;
 			break;

@@ -61,11 +61,13 @@ static int current_method_yield_points = 0;
  * it is safe to use it like this. Values is a struct containing interesting 
  * values later used to generate the interleavings scheme we want.
  */
+/* GHashTable<MonoMethod*, HijackMethodInfo*> */
 static GHashTable* hijack_methodinfos_storage = NULL;
 
 /* Track all the method infos that have been created and store them in a 
  * LIFO manner
  */
+/* GList<HijackMethodInfo*> */
 static GList* method_infos = NULL;
 
 /* Maintain a list of the successive execution of method infos. Every method adds itself
@@ -207,6 +209,7 @@ static void
 internal_iterator_method (gpointer data, gpointer user_data)
 {
 	HijackMethodInfo* method = (HijackMethodInfo*)data;
+	//g_return_if_fail (method->current_execution_slot != NULL);
 	HijackInterleaving* slot = method->current_execution_slot->data;
 	MonoDebugMethodInfo* mdebug = mono_debug_lookup_method (method->mono_method);
 	guint offset = 0, accumulator = 0, i = 0;
@@ -390,6 +393,179 @@ mono_hijack_reset_interleaving (HijackInterleaving* interleaving)
 	}
 }
 
+/* Free up memory of a single interleaving chain */
+static void
+mono_hijack_interleaving_free (HijackInterleaving* interleaving)
+{
+	if (interleaving == NULL)
+		return;
+
+	mono_hijack_interleaving_free (interleaving->next);
+	g_free (interleaving);
+}
+
+/* Free up memory of a whole set of interleaving chain */
+static void
+mono_hijack_interleavings_free (GList** array, gint length)
+{
+	int i = 0;
+
+	for (i = 0; i < length; ++i) {
+		GList* iter = array[i];
+		for (; iter != NULL; iter = g_list_next (iter))
+			mono_hijack_interleaving_free ((HijackInterleaving*)iter->data);
+	}
+}
+
+/* This method is executed when a branch instruction (BR, BRTRUE, BRFALSE, BEQ, ...) caused by a statement, like `while'
+ * or `if', was executed and thus changed the control flow and broke our yielding pattern. This
+ * function's goal is thus to stop the execution*, create another set of temporary interleaving to cope with the branch,
+ * register them correctly and start the simulation again
+ */
+static void
+mono_hijack_process_branch (HijackBranchInfo* branch)
+{
+	GList* node = method_infos;
+
+	g_return_if_fail (branch != NULL);
+	g_return_if_fail (branch->il_offset_position != -1);
+
+	/* Short-circuit code. There is a case where the branch has no fundamental impact:
+	 * when all the methods above the concerned method in the call chain are finished and
+	 * there is no method below waiting for launch or finishing. In that case we simply clean
+	 * the branch flag, add the required amount of interleaving count so that the method finish
+	 * and return directly
+	 */
+	if (branch->method == MINFO(node)) {
+		puts ("Trying short circuit");
+		gboolean last = TRUE;
+		GList* tnode = node->next;
+
+		while (tnode != NULL) {
+			HijackMethodInfo* ti = tnode->data;
+			if (ti->current_interleaving != NULL &&
+			    ti->current_interleaving->next != NULL) {
+				last = FALSE;
+				break;
+			}
+			tnode = tnode->next;
+		}
+
+		if (last) {
+			branch->method->current_interleaving->no_yielding_count += branch->method->il_offsets->len - branch->il_offset_position;
+			branch->method->possible_branching = NULL;
+			puts("Short-circuit taken");
+
+			return;
+		}
+	}
+
+
+	/* Some test method may not have been launched yet, so move the pointer
+	 * to the first run one (every other afterwards should be initialized)
+	 */
+	while (MINFO(node)->current_execution_slot == NULL)
+		node = node->next;
+
+	// Walk through the executing methods infos to dump them
+	while (node != NULL) {
+		HijackMethodInfo* m = MINFO(node);
+		HijackInterleaving* interleaving = NULL;
+		HijackInterleaving* last = NULL;
+		HijackInterleaving* iter = m->current_execution_slot->data;
+		HijackInterleaving* temp = NULL;
+		int num_injected = m->number_injected_calls;
+		int depth = m->current_yield_count;
+		int accumulator = 0;
+
+		printf ("Processing %s\n", m->mono_method->name);
+		printf ("Before: ");
+		DUMP_INTERLEAVING(iter);
+		puts("");
+
+		// Save the interleaving path that led to the jump
+		while (iter != m->current_interleaving) {
+			temp = g_new0 (HijackInterleaving, 1);
+			temp->initial_count = temp->no_yielding_count = iter->initial_count;
+			accumulator += temp->initial_count;
+			temp->disable_jump_tracking = TRUE;
+
+			if (last != NULL) {
+				last->next = temp;
+				last = temp;
+			} else {
+				interleaving = last = temp;
+			}
+
+			iter = iter->next;
+		}
+
+		// Add the remaining count to reach our jump
+		if (iter->initial_count > iter->no_yielding_count)
+			accumulator += iter->initial_count - iter->no_yielding_count;
+
+		// Acccumulate the remaining count into the last node for the specialized interleavings creation
+		temp = g_new0 (HijackInterleaving, 1);
+		last->next = temp;
+		temp->disable_jump_tracking = TRUE;
+
+		while (iter != NULL) {
+			temp->no_yielding_count = (temp->initial_count += iter->initial_count);
+			iter = iter->next;
+			if (iter != NULL)
+				depth -= 1;
+		}
+
+		// Add the equivalent of extra instructions caused by the jump
+		if (m == branch->method) {
+			temp->no_yielding_count = (temp->initial_count += branch->method->il_offsets->len - branch->il_offset_position);
+			m->number_injected_calls = (num_injected += branch->method->il_offsets->len - branch->il_offset_position);
+		}
+
+		printf ("After (%d) : ", accumulator);
+		DUMP_INTERLEAVING(interleaving);
+		puts("");
+
+		{
+			HijackSaveSlot* slot = g_new0 (HijackSaveSlot, 1);
+			SAVE_CONTEXT (slot->save, m);
+			CLEAN_CONTEXT (m);
+			slot->execution_slots = m->execution_slots;
+			g_list_push (m->saved_slots, slot);
+		}
+
+		// Register the new special executions slots (if necessary)
+		if (accumulator + 1 != num_injected) {
+			int i = 0;
+			GList** array = g_malloc0 (sizeof (GList*) * num_injected - 1);
+			mono_hijack_generate_interleavings_internal (interleaving, array, accumulator + 2, num_injected, depth);
+			m->execution_slots = array;
+
+			puts ("Dumping content:");
+			for (i = 0; i < num_injected - 1; i++) {
+				GList* foo = array[i];
+				while (foo != NULL) {
+					HijackInterleaving* slot = foo->data;
+					DUMP_INTERLEAVING (slot);
+					foo = g_list_next (foo);
+					puts ("");
+				}
+				puts("\n");
+			}
+		}
+
+		if (m->current_num_method == 0)
+			current_method_yield_points = m->current_yield_count++;
+
+		node = node->next;
+	}
+
+	branch->method->possible_branching = NULL;
+
+	// Restart scheduler
+	mono_runtime_invoke (scheduler_force_restart_method, NULL, NULL, NULL);
+}
+
 static void
 hijack_func (HijackMethodInfo* m)
 {
@@ -397,6 +573,13 @@ hijack_func (HijackMethodInfo* m)
 	HijackMethodInfoSave save;
 
 	g_return_if_fail (slot != NULL);
+
+	// If there is a branch that has been registered, launch branching machinery
+	if (m->possible_branching != NULL && !slot->disable_jump_tracking) {
+		puts ("Successful jump detected in the program flow, launching special code");
+		mono_hijack_process_branch (m->possible_branching);
+		return;
+	}
 
 	if (slot->no_yielding_count == 0) {
 		m->current_interleaving = slot->next;
@@ -447,19 +630,28 @@ static void
 hijack_func_first (HijackMethodInfo* m)
 {
 	if (scheduler_yield_method == NULL) {
-		/* Find Scheduler.Yield static method */
+		/* Find Scheduler static methods */
 		MonoAssemblyName* name = mono_assembly_name_new ("Heisen");
 		MonoAssembly* assembly = mono_assembly_loaded (name);
 		MonoImage* image = mono_assembly_get_image (assembly);
 		MonoMethodDesc* yield_desc = mono_method_desc_new ("Heisen.Scheduler:Yield()", TRUE);
 		MonoMethodDesc* stop_desc = mono_method_desc_new ("Heisen.Scheduler:Stop()", TRUE);
+		MonoMethodDesc* restart_desc = mono_method_desc_new ("Heisen.Scheduler:ForceRestart()", TRUE);
 		scheduler_yield_method = mono_method_desc_search_in_image (yield_desc, image);
 		scheduler_stop_method = mono_method_desc_search_in_image (stop_desc, image);
-		if (scheduler_yield_method == NULL || scheduler_stop_method == NULL)
-			printf ("Scheduler method initialized correctly? %s %s\n",
+		scheduler_force_restart_method = mono_method_desc_search_in_image (restart_desc, image);
+		if (scheduler_yield_method == NULL || scheduler_stop_method == NULL || scheduler_force_restart_method == NULL)
+			printf ("Scheduler method initialized correctly? %s %s %s\n",
 			        scheduler_yield_method != NULL ? "Yes" : "No",
-			        scheduler_stop_method != NULL ? "Yes" : "No");
+			        scheduler_stop_method != NULL ? "Yes" : "No",
+			        scheduler_force_restart_method != NULL ? "Yes" : "No");
+
+		mono_method_desc_free (yield_desc);
+		mono_method_desc_free (stop_desc);
+		mono_method_desc_free (restart_desc);
 	}
+
+	g_return_if_fail (m != NULL);
 
 	if (m->execution_slots == NULL)
 		mono_hijack_generate_interleavings (m);
@@ -469,45 +661,66 @@ hijack_func_first (HijackMethodInfo* m)
 
 	method_execution_flow = g_list_prepend (method_execution_flow, m);
 
-	/* First pass in the hijack_func method, we initialize the GList traversal pointer */
-	if (m->current_execution_slot == NULL) {
-		m->current_interleaving = (m->current_execution_slot = m->execution_slots[current_method_yield_points])->data;
-	/* Start of the invocation i.e. the current interleaving is finished, time to get a new one (or go back at the beginning) */
-	} else {
-		mono_hijack_reset_interleaving (m->current_execution_slot->data);
-		/* If our method has been called sufficiently depending on its place in the call chain then change interleaving 
-		 * TODO: cache function call result
-		 */
-		if (count_needed_neighbor_interleaving (m) <= ++m->current_call_number) {
-			m->current_call_number = 0;
-			m->current_execution_slot = g_list_next (m->current_execution_slot);
-			/* No more interleaving for us? If we are the master executing method it means the test is finished
-			 * if not we go back at the beginning, it simply means we are at the end of this call chain interleaving
+	puts ("First of first");
+
+	do {
+		/* First pass in the hijack_func method, we initialize the GList traversal pointer */
+		if (m->current_execution_slot == NULL) {
+			puts ("Set up");
+			m->current_execution_slot = m->execution_slots[current_method_yield_points];
+			m->current_interleaving = m->current_execution_slot->data;
+		/* Start of the invocation i.e. the current interleaving is finished, time to get a new one (or go back at the beginning) */
+		} else {
+			mono_hijack_reset_interleaving (m->current_execution_slot->data);
+			/* If our method has been called sufficiently depending on its place in the call chain then change interleaving 
+			 * TODO: cache function call result
 			 */
-			if (m->current_execution_slot == NULL) {
-				if (m->current_num_method == 0) {
-					if ((current_method_yield_points = m->current_yield_count++) >= m->number_injected_calls - 1) {
-						mono_runtime_invoke (scheduler_stop_method, NULL, NULL, NULL);
-						return;
+			if (count_needed_neighbor_interleaving (m) <= ++m->current_call_number) {
+				m->current_call_number = 0;
+				m->current_execution_slot = g_list_next (m->current_execution_slot);
+				/* No more interleaving for us? If we are the master executing method it means the test is finished
+				 * if not we go back at the beginning, it simply means we are at the end of this call chain interleaving
+				 */
+				if (m->current_execution_slot == NULL) {
+					if (m->current_num_method == 0) {
+						if ((current_method_yield_points = m->current_yield_count++) >= m->number_injected_calls - 1) {
+							// In case some context is saved, we restore it on all HijackMethodInfo
+							if (m->saved_slots != NULL) {
+								GList* iter = method_infos;
+
+								for (; iter != NULL; iter = g_list_next (iter)) {
+									HijackMethodInfo* minfo = MINFO(iter);
+									mono_hijack_interleavings_free (minfo->execution_slots, minfo->number_injected_calls - 1);
+									minfo->execution_slots = MSAVESLOT(minfo->saved_slots)->execution_slots;
+									RESTORE_CONTEXT(MSAVESLOT(minfo->saved_slots)->save, minfo);
+									g_list_pop (minfo->saved_slots);
+								}
+
+								current_method_yield_points = m->current_yield_count - 1;
+
+								continue;
+							}
+							mono_runtime_invoke (scheduler_stop_method, NULL, NULL, NULL);
+							return;
+						} else {
+							m->current_execution_slot = m->execution_slots[current_method_yield_points];
+							m->current_neighbours_interleaving_count = 0;
+						}
 					} else {
 						m->current_execution_slot = m->execution_slots[current_method_yield_points];
-						m->current_neighbours_interleaving_count = 0;
 					}
-				} else {
-					m->current_execution_slot = m->execution_slots[current_method_yield_points];
 				}
 			}
 		}
+		break;
+	} while (1);
 
-		//printf ("Going with following execution slot for %s(%d)\n", m->mono_method->name, m->current_num_method);
-		//internal_iterator_method (NULL, m, NULL);
-		/* In all case we set back current_interleaving to a correct value at some start of an execution slot */
-		m->current_interleaving = m->current_execution_slot->data;
-	}
-
+	//printf ("Going with following execution slot for %s(%d)\n", m->mono_method->name, m->current_num_method);
+	//internal_iterator_method (NULL, m, NULL);
+	/* In all case we set back current_interleaving to a correct value at some start of an execution slot */
+	m->current_interleaving = m->current_execution_slot->data;
 	/*printf ("Going with following execution slot for %s(%d)\n", m->mono_method->name, m->current_num_method);
 	  internal_iterator_method (NULL, m, NULL);*/
-
 	hijack_func (m);
 }
 
@@ -518,6 +731,7 @@ mono_hijack_init ()
 
 	register_icall (hijack_func, "hijack_func", "void ptr", TRUE);
 	register_icall (hijack_func_first, "hijack_func_first", "void ptr", TRUE);
+	//register_icall (hijack_branch_func, "hijack_branch_func", "void ptr", TRUE);
 	
 	mono_add_internal_call ("Heisen.RuntimeManager::mono_enable_hijack_code",
 	                        mono_enable_hijack_code);
@@ -571,3 +785,49 @@ mono_emit_hijack_code (MonoCompile *cfg)
 	g_array_append_val (methodinfo->il_offsets, cfg->real_offset);
 }
 
+/* The way it works: just before a branch instruction is happening, we call mono_emit_hijack_branch_code
+ * that will create a branch marker, set it up and register it.
+ * If the jump happens this marker won't be cleared so the hijack code can launch the machinery, if the 
+ * jump isn't done then the marker is clear by mono_emit_hijack_end_branch_code called just after the
+ * jump instruction
+ */
+void
+mono_emit_hijack_branch_code (MonoCompile* cfg, gint target)
+{
+	HijackBranchInfo* branch = g_new0 (HijackBranchInfo, 1);
+	HijackMethodInfo* info = g_hash_table_lookup (hijack_methodinfos_storage, cfg->method);
+	gint index = 0;
+	MonoInst* arg[1];
+
+	if (info == NULL) {
+		g_free (branch);
+		return;
+	}
+
+	branch->method = info;
+	branch->original_target = target;
+
+	while (index < info->il_offsets->len) {
+		if (g_array_index (info->il_offsets, guint, index) == target)
+			break;
+		index++;
+	}
+
+	branch->il_offset_position = index >= info->il_offsets->len ? -1 : index;
+
+	EMIT_NEW_PCONST (cfg, arg[0], &info->possible_branching);
+	MONO_EMIT_NEW_STORE_MEMBASE_IMM (cfg, OP_STOREP_MEMBASE_IMM, arg[0]->dreg, 0, branch);
+	//mono_emit_jit_icall (cfg, hijack_branch_func, arg);
+}
+
+void mono_emit_hijack_end_branch_code (MonoCompile* cfg)
+{
+	HijackMethodInfo* info = g_hash_table_lookup (hijack_methodinfos_storage, cfg->method);
+	MonoInst* arg[1];
+
+	if (info == NULL)
+		return;
+
+	EMIT_NEW_PCONST (cfg, arg[0], &info->possible_branching);
+	MONO_EMIT_NEW_STORE_MEMBASE_IMM (cfg, OP_STOREP_MEMBASE_IMM, arg[0]->dreg, 0, NULL);
+}
