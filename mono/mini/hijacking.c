@@ -28,39 +28,10 @@
 #include <mono/metadata/opcodes.h>
 #include <mono/metadata/mono-endian.h>
 #include <mono/metadata/tokentype.h>
-#include <mono/metadata/tabledefs.h>
 #include <mono/metadata/marshal.h>
 #include <mono/metadata/debug-helpers.h>
 #include <mono/metadata/mono-debug.h>
 #include <mono/metadata/debug-mono-symfile.h>
-#include <mono/metadata/gc-internal.h>
-#include <mono/metadata/security-manager.h>
-#include <mono/metadata/threads-types.h>
-#include <mono/metadata/security-core-clr.h>
-#include <mono/metadata/monitor.h>
-#include <mono/metadata/profiler-private.h>
-#include <mono/metadata/profiler.h>
-#include <mono/utils/mono-compiler.h>
-#include <mono/metadata/mono-basic-block.h>
-
-#include <mono/metadata/threads.h>
-#include <mono/metadata/appdomain.h>
-#include <mono/metadata/debug-helpers.h>
-#include <mono/io-layer/io-layer.h>
-#include <mono/metadata/mono-config.h>
-#include <mono/metadata/environment.h>
-#include <mono/metadata/mono-debug.h>
-#include <mono/metadata/gc-internal.h>
-#include <mono/metadata/threads-types.h>
-#include <mono/metadata/verify.h>
-#include <mono/metadata/verify-internals.h>
-#include <mono/metadata/mempool-internals.h>
-#include <mono/metadata/attach.h>
-#include <mono/metadata/runtime.h>
-#include <mono/utils/mono-math.h>
-#include <mono/utils/mono-logger-internal.h>
-#include <mono/utils/mono-mmap.h>
-#include <mono/utils/dtrace.h>
 
 #include "mini.h"
 #include "trace.h"
@@ -71,66 +42,18 @@
 #include "jit.h"
 #include "debugger-agent.h"
 
-/* This struct forms a linked list of instruction on when to yield.
- * Each node contains a number that is decremented at each instruction,
- * when it goes to 0, the node is discarded and the hijack method calls
- * Yield, the process repeat until there is no more node which should
- * correspond to the moment when the method body is finished
- */
-typedef struct _HijackInterleaving {
-	int initial_count;
-	int no_yielding_count;
-	struct _HijackInterleaving* next;
-} HijackInterleaving;
-
-typedef struct {
-	MonoMethod* mono_method;
-	int number_injected_calls;
-	int number_interleaving;
-	GArray* il_offsets;
-
-	/* GList<HijackInterleaving*>[] - array keyed by number of yield point to a list of interleavings */
-	GList** execution_slots;
-
-	/* These fields are changed during the execution of the method */
-	int current_yield_count; /* used as execution_slots index for enumeration */
-	GList* current_execution_slot; /* iterating through the list of HijackInterleaving */
-	HijackInterleaving* current_interleaving; /* Iteration ptr to the current block of the current interleaving */
-	int current_num_method; /* Used as an index to tell where the method is in the interleaving call chain */
-	int current_call_number; /* Where this methodinfo is in the test call chain, determined by scheduler execution order */
-	int current_neighbours_interleaving_count; /* How much execution we have for a single interleaving */
-} HijackMethodInfo;
-
-typedef struct {
-	GList* c_execution_slot;
-	HijackInterleaving* c_slot;
-	int c_num_method;
-	int c_call_number;
-	int c_neighbours_interleaving_count;
-} HijackMethodInfoSave;
-
-#define SAVE_CONTEXT(save, method) \
-	save.c_slot = method->current_interleaving; \
-	save.c_execution_slot = method->current_execution_slot; \
-	save.c_num_method = method->current_num_method; \
-	save.c_call_number = method->current_call_number; \
-	save.c_neighbours_interleaving_count = method->current_neighbours_interleaving_count; \
-	method->current_execution_slot = NULL; \
-	method->current_interleaving = NULL;
-
-#define RESTORE_CONTEXT(save, method) \
-	method->current_interleaving = save.c_slot; \
-	method->current_execution_slot = save.c_execution_slot; \
-	method->current_num_method = save.c_num_method; \
-	method->current_call_number = save.c_call_number; \
-	method->current_neighbours_interleaving_count = save.c_neighbours_interleaving_count;
+#include "hijacking.h"
 
 extern void register_icall (gpointer func, const char *name, const char *sigstr, gboolean save);
 
 static int hijacking = FALSE;
 static int total_num_method = 0;
+/* This call the actual Yield logic inside the scheduler and start/resume another task execution */
 static MonoMethod* scheduler_yield_method = NULL;
+/* Totally stop the scheduler meaning the current test fixture has passed successfully */
 static MonoMethod* scheduler_stop_method = NULL;
+/* In case the current interleaving needs to be expanded into a special set, tell the scheduler to restart */
+static MonoMethod* scheduler_force_restart_method = NULL;
 static int current_num_method_cache = 0;
 static int current_method_yield_points = 0;
 
@@ -180,15 +103,6 @@ mono_disable_hijack_code ()
 	hijacking = FALSE;
 }
 
-#define DUMP_INTERLEAVING(s) while (s != NULL) { printf ("%d", s->initial_count); if (s->next != NULL) printf ("-"); s = s->next; }
-
-typedef struct {
-	GString* code;
-	gchar node_letter;
-	guint node_id;
-	GList** yield_ids;
-} DotCode;
-
 static DotCode*
 mono_dot_code_new (void)
 {
@@ -225,9 +139,6 @@ add_yield_link (DotCode* dcode, gchar c1, gchar c2, guint num1, guint num2)
 	g_string_append_printf (dcode->code, "%c%u -> %c%u;\n", c1, num1, c2, num2);
 }
 
-#define MINFO(n) ((HijackMethodInfo*)(n->data))
-#define g_list_pop(list) list = g_list_delete_link (list, list);
-
 static void
 end_graph (DotCode* dcode)
 {
@@ -241,7 +152,7 @@ end_graph (DotCode* dcode)
 		g_string_prepend_c (dcode->code, c);
 	}
 
-	puts ("//BEGIN execution flow");
+	/*	puts ("//BEGIN execution flow");
 	while (execution_node != NULL) {
 		puts (MINFO(execution_node)->mono_method->name);
 
@@ -250,7 +161,7 @@ end_graph (DotCode* dcode)
 	for (i = 0; i < total_num_method; i++)
 		printf ("%d ", g_list_length (dcode->yield_ids[i]));
 	puts ("");
-	puts ("//END");
+	puts ("//END");*/
 
 	execution_node = method_execution_flow;
 	i = MINFO (execution_node)->current_num_method;
@@ -258,7 +169,7 @@ end_graph (DotCode* dcode)
 
 	while (execution_node != NULL && g_list_next (execution_node) != NULL) {
 		i = MINFO(execution_node)->current_num_method;
-		printf ("%d %u\n", i, total_num_method);
+		//printf ("%d %u\n", i, total_num_method);
 		id1 = GPOINTER_TO_INT (dcode->yield_ids [i]->data);
 		g_list_pop (dcode->yield_ids [i]);
 
@@ -277,10 +188,6 @@ end_graph (DotCode* dcode)
 	g_string_prepend (dcode->code, "digraph G {\n{\nrank = same;\n");
 	g_string_append (dcode->code, "\n}\n");
 }
-
-/*#define begin_rank(_dcode, _lcounter) g_string_append_printf (_dcode->ranks, "{\nrank = same;\nl%d [shape = plaintext];\n")
-#define add_to_rank(_dcode, _char, _num) g_string_append_printf (_dcode->ranks, "%c%u;\n", _char, _num)
-#define end_rank(_dcode) g_string_append (_dcode->ranks, "}\n")*/
 
 #define add_item(_dcode, _char, _num, _il, _line) g_string_append_printf (_dcode->code, "%c%u [label = \"IL %#04x\\nline %u\"];\n", _char, _num, _il, _line)
 
