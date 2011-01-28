@@ -33,6 +33,8 @@ namespace System.Threading.Tasks
 {
 	public static class Parallel
 	{
+		static readonly bool sixtyfour = Environment.Is64BitProcess;
+
 		internal static int GetBestWorkerNumber ()
 		{
 			return GetBestWorkerNumber (TaskScheduler.Current);
@@ -157,7 +159,7 @@ namespace System.Threading.Tasks
 			Action workerMethod = delegate {
 				int localWorker = Interlocked.Increment (ref currentIndex);
 				StealRange range = ranges[localWorker];
-				int index = range.V.Actual;
+				int index = (sixtyfour ? range.V64.Actual : range.V32.Actual);
 				int stopIndex = localWorker + 1 == num ? toExclusive : Math.Min (toExclusive, index + step);
 				TLocal local = localInit ();
 
@@ -165,13 +167,13 @@ namespace System.Threading.Tasks
 				CancellationToken token = parallelOptions.CancellationToken;
 
 				try {
-					for (int i = index; i < stopIndex; i = ++range.V.Actual) {
+					for (int i = index; i < stopIndex;) {
 						if (infos.IsStopped)
 							return;
 
 						token.ThrowIfCancellationRequested ();
 
-						if (i >= stopIndex - range.V.Stolen)
+						if (i >= stopIndex - (sixtyfour ? range.V64.Stolen : range.V32.Stolen))
 							break;
 
 						if (infos.LowestBreakIteration != null && infos.LowestBreakIteration > i)
@@ -180,13 +182,14 @@ namespace System.Threading.Tasks
 						state.CurrentIteration = i;
 						local = body (i, state, local);
 
-						if (i + 1 >= stopIndex - range.V.Stolen)
+						if (i + 1 >= stopIndex - (sixtyfour ? range.V64.Stolen : range.V32.Stolen))
 							break;
-					}
 
-					// FIXME: the following code is failing at the moment on 32bits, disable it for now
-					// if (!Environment.Is64BitProcess)
-					// 	return;
+						if (sixtyfour)
+							range.V64.Actual = ++i;
+						else
+							range.V32.Actual = ++i;
+					}
 
 					// Try toExclusive steal fromInclusive our right neighbor (cyclic)
 					int len = num + localWorker;
@@ -195,26 +198,36 @@ namespace System.Threading.Tasks
 						range = ranges[extWorker];
 
 						stopIndex = extWorker + 1 == num ? toExclusive : Math.Min (toExclusive, fromInclusive + (extWorker + 1) * step);
-
-						StealValue val = new StealValue ();
-						long old;
-						int stolen;
+						int stolen = -1;
 
 						do {
-							do {
-								old = val.Value = Thread.VolatileRead (ref range.V.Value);
+							long old;
 
-								if (val.Actual >= stopIndex - val.Stolen - 2)
-									goto next;
-								val.Stolen += 1;
-							} while (Interlocked.CompareExchange (ref range.V.Value, val.Value, old) != old);
-
-							stolen = stopIndex - val.Stolen;
-
-							if (stolen > range.V.Actual) {
-								local = body (stolen, state, local);
+							if (sixtyfour) {
+								StealValue64 val = new StealValue64 ();
+								do {
+									old = val.Value = range.V64.Value;
+									if (val.Actual >= stopIndex - val.Stolen - 2)
+										goto next;
+									stolen = (val.Stolen += 1);
+								} while (Interlocked.CompareExchange (ref range.V64.Value, val.Value, old) != old);
+							} else {
+								StealValue32 val = new StealValue32 ();
+								do {
+									old = val.Value = Thread.VolatileRead (ref range.V32.Value);
+									if (val.Actual >= stopIndex - val.Stolen - 2)
+										goto next;
+									stolen = (val.Stolen += 1);
+								} while (Interlocked.CompareExchange (ref range.V32.Value, val.Value, old) != old);
 							}
-						} while (stolen >= 0);
+
+							stolen = stopIndex - stolen;
+
+							if (stolen > (sixtyfour ? range.V64.Actual : range.V32.Actual))
+								local = body (stolen, state, local);
+							else
+								break;
+						} while (true);
 
 						next:
 						continue;
@@ -236,7 +249,7 @@ namespace System.Threading.Tasks
 		}
 
 		[StructLayout(LayoutKind.Explicit)]
-		struct StealValue {
+		struct StealValue32 {
 			[FieldOffset(0)]
 			public long Value;
 			[FieldOffset(0)]
@@ -245,13 +258,25 @@ namespace System.Threading.Tasks
 			public volatile int Stolen;
 		}
 
+		[StructLayout(LayoutKind.Explicit)]
+		struct StealValue64 {
+			[FieldOffset(0)]
+			public long Value;
+			[FieldOffset(0)]
+			public int Actual;
+			[FieldOffset(4)]
+			public int Stolen;
+		}
+
 		class StealRange
 		{
-			public StealValue V;
+			public StealValue32 V32;
+			public StealValue64 V64;
 
 			public StealRange (int fromInclusive, int i, int step)
 			{
-				V.Actual = fromInclusive + i * step;
+				V32.Actual = fromInclusive + i * step;
+				V64.Actual = fromInclusive + i * step;				
 			}
 		}
 
