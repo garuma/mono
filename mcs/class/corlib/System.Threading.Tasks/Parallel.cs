@@ -185,8 +185,8 @@ namespace System.Threading.Tasks
 					}
 
 					// FIXME: the following code is failing at the moment on 32bits, disable it for now
-					if (!Environment.Is64BitProcess)
-						return;
+					// if (!Environment.Is64BitProcess)
+					// 	return;
 
 					// Try toExclusive steal fromInclusive our right neighbor (cyclic)
 					int len = num + localWorker;
@@ -196,14 +196,13 @@ namespace System.Threading.Tasks
 
 						stopIndex = extWorker + 1 == num ? toExclusive : Math.Min (toExclusive, fromInclusive + (extWorker + 1) * step);
 
-						StealValue val;
+						StealValue val = new StealValue ();
 						long old;
 						int stolen;
 
 						do {
 							do {
-								val = range.V;
-								old = val.Value;
+								old = val.Value = Thread.VolatileRead (ref range.V.Value);
 
 								if (val.Actual >= stopIndex - val.Stolen - 2)
 									goto next;
@@ -241,9 +240,9 @@ namespace System.Threading.Tasks
 			[FieldOffset(0)]
 			public long Value;
 			[FieldOffset(0)]
-			public int Actual;
+			public volatile int Actual;
 			[FieldOffset(4)]
-			public int Stolen;
+			public volatile int Stolen;
 		}
 
 		class StealRange
