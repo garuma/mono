@@ -69,16 +69,9 @@ struct _MonoWSQ {
 	MonoArray *queue;
 };
 
-/* Redefine the Interlocked* functions for 64bits
+/* Redefine the InterlockedCompareExchange function for 64bits
  */
 #if defined(__x86_64__)
-static inline gint64 NativeInterlockedIncrement(volatile gint64 *val)
-{
-	gint64 tmp;
-	__asm__ __volatile__ ("lock; xadd %0, %1" : "=r" (tmp), "=m" (*val) : "0" (1), "m" (*val));
-	return(tmp+1);
-}
-
 static inline gint64 NativeInterlockedCompareExchange(volatile gint64 *dest, gint64 exch, gint64 comp)
 {
 	gint64 old;
@@ -86,7 +79,6 @@ static inline gint64 NativeInterlockedCompareExchange(volatile gint64 *dest, gin
 	return (old);
 }
 #else
-#define NativeInterlockedIncrement(addr) InterlockedIncrement(addr)
 #define NativeInterlockedCompareExchange(addr, newval, compval) InterlockedCompareExchange(addr, newval, compval)
 #endif
 
@@ -181,7 +173,8 @@ mono_wsq_local_push (void *obj)
 	}
 
 	mono_array_setref (a, b % size, obj);
-	NativeInterlockedIncrement (&wsq->bottom);
+	mono_memory_write_barrier ();
+	wsq->bottom = b + 1;
 
 	return TRUE;
 }
@@ -197,6 +190,7 @@ mono_wsq_local_pop (MonoWSQ *wsq, void **ptr)
 	if (ptr == NULL || wsq == NULL)
 		return FALSE;
 	b = --wsq->bottom;
+	mono_memory_barrier ();
 	a = wsq->queue;
 	t = wsq->top;
 	size = b - t;
