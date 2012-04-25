@@ -1,0 +1,201 @@
+%{
+using System.Text;
+using System.IO;
+using System;
+using System.Linq;
+using System.Collections.Generic;
+
+namespace Monkeydoc.Ecma
+{
+	public class EcmaUrlParser
+	{
+        int yacc_verbose_flag = 0;
+
+        public void IsValid (string input)
+        {
+            var reader = new StringReader (input);
+			var lexer = new EcmaUrlTokenizer (reader);
+			this.yyparse (lexer);
+        }
+
+        public EcmaDesc Parse (string input)
+        {
+            var reader = new StringReader (input);
+			var lexer = new EcmaUrlTokenizer (reader);
+			return (EcmaDesc)this.yyparse (lexer);
+        }
+
+        public bool TryParse (string input, out EcmaDesc desc)
+        {
+            desc = null;
+            try {
+                desc = Parse (input);
+            } catch {
+                return false;
+            }
+            return true;
+        }
+
+        EcmaDesc CopyFromEcmaDesc (EcmaDesc dest, EcmaDesc orig)
+        {
+            if (string.IsNullOrEmpty (dest.Namespace))
+               dest.Namespace = orig.Namespace;
+            if (string.IsNullOrEmpty (dest.TypeName))
+               dest.TypeName = orig.TypeName;
+            if (dest.GenericTypeArguments == null)
+               dest.GenericTypeArguments = orig.GenericTypeArguments;
+            if (dest.NestedType == null)
+               dest.NestedType = orig.NestedType;
+            if (dest.ArrayDimension == 0)
+               dest.ArrayDimension = orig.ArrayDimension;
+            if (string.IsNullOrEmpty (dest.MemberName))
+               dest.MemberName = orig.MemberName;
+            if (dest.GenericMemberArguments == null)
+               dest.GenericMemberArguments = orig.GenericMemberArguments;
+            if (dest.MemberArguments == null)
+               dest.MemberArguments = orig.MemberArguments;
+
+            return dest;
+        }
+
+        List<T> SafeReverse<T> (List<T> input)
+        {
+            if (input == null)
+               return null;
+            input.Reverse ();
+            return input;
+        }
+%}
+
+%token ERROR
+%token IDENTIFIER
+%token DIGIT
+%token DOT
+%token COMMA
+%token COLON
+%token INNER_TYPE_SEPARATOR
+%token OP_GENERICS_LT
+%token OP_GENERICS_GT
+%token OP_GENERICS_BACKTICK
+%token OP_OPEN_PAREN
+%token OP_CLOSE_PAREN
+%token OP_ARRAY_OPEN
+%token OP_ARRAY_CLOSE
+
+%start expression
+
+%%
+
+expression
+        : 'T' COLON type_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Type }, (EcmaDesc)$3); }
+        | 'N' COLON namespace_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Namespace }, (EcmaDesc)$3); }
+        | 'M' COLON method_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Method }, (EcmaDesc)$3); }
+        | 'F' COLON field_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Field }, (EcmaDesc)$3); }
+        | 'C' COLON constructor_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Constructor }, (EcmaDesc)$3); }
+        | 'P' COLON property_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Property }, (EcmaDesc)$3); }
+        | 'E' COLON event_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Event }, (EcmaDesc)$3); }
+
+/* i.e. id.id.id or id */
+dot_expression
+        : IDENTIFIER { $$ = new List<string> { (string)$1 }; }
+        | IDENTIFIER DOT dot_expression { ((ICollection<string>)$3).Add ((string)$1); $$ = $3; }
+
+namespace_expression
+        : dot_expression { $$ = new EcmaDesc { Namespace = string.Join (".", ((IEnumerable<string>)$1).Reverse ()) }; }
+
+type_expression
+        : dot_expression type_expression_suffix {
+                         var dotExpr = ((List<string>)$1);
+                         dotExpr.Reverse ();
+                         $$ = CopyFromEcmaDesc (new EcmaDesc {
+                            DescKind = EcmaDesc.Kind.Type,
+                            Namespace = string.Join (".", dotExpr.Take (dotExpr.Count - 1)),
+                            TypeName = dotExpr.Last ()
+                         }, (EcmaDesc)$2);
+                     }
+
+type_expression_suffix
+        : opt_generic_type_suffix opt_inner_type_description opt_array_definition {
+                         $$ = new EcmaDesc {
+                            GenericTypeArguments = $1 as List<EcmaDesc>,
+                            NestedType = $2 as EcmaDesc,
+                            ArrayDimension = $3 == null ? 0 : (int)$3
+                         };
+                     }
+
+opt_inner_type_description
+        : /* empty */ { $$ = null; }
+        | INNER_TYPE_SEPARATOR type_expression { $$ = $2; }
+
+opt_generic_type_suffix
+        : /* empty */ { $$ = null; }
+        | OP_GENERICS_BACKTICK DIGIT { $$ = Enumerable.Repeat<string> (null, (int)$2).ToList (); }
+        | OP_GENERICS_LT generic_type_arg_list OP_GENERICS_GT { $$ = $2; }
+
+generic_type_arg_list
+        : type_expression { $$ = new List<EcmaDesc> () { (EcmaDesc)$1 }; }
+        | generic_type_arg_list COMMA type_expression { ((List<EcmaDesc>)$1).Add ((EcmaDesc)$3); $$ = $1; }
+
+opt_array_definition
+        : /* empty */ { $$ = 0; }
+        | OP_ARRAY_OPEN opt_array_definition_list OP_ARRAY_CLOSE { $$ = $2; }
+
+opt_array_definition_list
+        : /* empty */ { $$ = 1; }
+        | COMMA opt_array_definition_list { $$ = ((int)$2) + 1; }
+
+method_expression
+        : type_expression DOT IDENTIFIER opt_generic_type_suffix OP_OPEN_PAREN type_expression_list OP_CLOSE_PAREN { $$ = CopyFromEcmaDesc (new EcmaDesc {
+                           MemberName = $3 as string,
+                           GenericMemberArguments = $4 as List<EcmaDesc>,
+                           MemberArguments = SafeReverse ($6 as List<EcmaDesc>)
+                      }, (EcmaDesc)$1);
+                }
+        | dot_expression opt_generic_type_suffix OP_OPEN_PAREN type_expression_list OP_CLOSE_PAREN {
+                      var dotExpr = ((List<string>)$1);
+                      $$ = new EcmaDesc {
+                           Namespace = string.Join (".", dotExpr.Skip (2).DefaultIfEmpty (string.Empty).Reverse ()),
+                           TypeName = dotExpr.Skip (1).First (),
+                           MemberName = dotExpr.First (),
+                           GenericMemberArguments = $2 as List<EcmaDesc>,
+                           MemberArguments = SafeReverse ($4 as List<EcmaDesc>)
+                      };
+                }
+
+type_expression_list
+        : /* empty */ { $$ = null; }
+        | type_expression { $$ = new List<EcmaDesc> () { (EcmaDesc)$1 }; }
+        | type_expression COMMA type_expression_list { ((List<EcmaDesc>)$3).Add ((EcmaDesc)$1); $$ = $3; }
+
+property_expression
+        : type_expression DOT IDENTIFIER { $$ = CopyFromEcmaDesc (new EcmaDesc {
+                           MemberName = $3 as string,
+                      }, (EcmaDesc)$1);
+                }
+
+event_expression
+        : type_expression DOT IDENTIFIER { $$ = CopyFromEcmaDesc (new EcmaDesc {
+                           MemberName = $3 as string,
+                      }, (EcmaDesc)$1);
+                }
+
+constructor_expression
+        : type_expression DOT IDENTIFIER opt_constructor_suffix { $$ = CopyFromEcmaDesc (new EcmaDesc {
+                           MemberName = $3 as string,
+                           MemberArguments = $4 as List<EcmaDesc>
+                      }, (EcmaDesc)$1);
+                }
+
+opt_constructor_suffix
+        : /* empty */ { $$ = null; }
+        | OP_OPEN_PAREN type_expression_list OP_CLOSE_PAREN { $$ = $2; }
+
+field_expression
+        : type_expression DOT IDENTIFIER  { $$ = CopyFromEcmaDesc (new EcmaDesc {
+                           MemberName = $3 as string,
+                      }, (EcmaDesc)$1);
+                }
+
+%%
+
+}
