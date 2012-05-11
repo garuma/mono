@@ -9,12 +9,12 @@ namespace MonkeyDoc.Generators.Html
 {
 	public class Error2Html : IHtmlExporter
 	{
-		public string Export (string input)
+		public string Export (string input, Dictionary<string, string> extraArgs)
 		{
 			return Htmlize (new XPathDocument (new StringReader (input)));
 		}
 
-		public string Export (Stream input)
+		public string Export (Stream input, Dictionary<string, string> extraArgs)
 		{
 			return Htmlize (new XPathDocument (input));
 		}

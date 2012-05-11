@@ -76,6 +76,20 @@ namespace Monkeydoc.Ecma
 			set;
 		}
 
+		/* This indicates that we actually want an inner part of the ecmadesc
+		 * i.e. in case of T: we could want the members (*), ctor (C), methods (M), ...
+		 */
+		public char Etc {
+			get;
+			set;
+		}
+
+		public bool IsEtc {
+			get {
+				return Etc != (char)0;
+			}
+		}
+
 		// Returns the TypeName and the generic/inner type information if existing
 		public string ToCompleteTypeName ()
 		{
@@ -95,9 +109,16 @@ namespace Monkeydoc.Ecma
 		{
 			var result = MemberName;
 			if (GenericMemberArguments != null)
-				result += "<" + string.Join (",", GenericMemberArguments.Select (t => t.ToString ())) + ">";
-			if (format == Format.WithArgs)
-				return result;
+				result += "<" + string.Join (",", GenericMemberArguments.Select (t => t.ToCompleteTypeName ())) + ">";
+			if (format == Format.WithArgs) {
+				result += '(';
+				if (MemberArguments != null && MemberArguments.Count > 0) {
+					var args = MemberArguments
+						.Select (a => (string.IsNullOrEmpty (a.Namespace) ? string.Empty : a.Namespace + ".") + a.ToCompleteTypeName ());
+					result += string.Join (",", args);
+				}
+				result += ')';
+			}
 			return result;
 		}
 
@@ -145,7 +166,7 @@ namespace Monkeydoc.Ecma
 
 		public override string ToString ()
 		{
-			return string.Format ("({8}) {0}::{1}{2}{3}{7} {4}{5}{6}",
+			return string.Format ("({8}) {0}::{1}{2}{3}{7} {4}{5}{6} {9}",
 			                      Namespace,
 			                      TypeName,
 			                      GenericTypeArguments != null ? "<" + string.Join (",", GenericTypeArguments.Select (t => t.ToString ())) + ">" : string.Empty,
@@ -154,7 +175,8 @@ namespace Monkeydoc.Ecma
 			                      GenericMemberArguments != null ? "<" + string.Join (",", GenericMemberArguments.Select (t => t.ToString ())) + ">" : string.Empty,
 			                      MemberArguments != null ? "(" + string.Join (",", MemberArguments.Select (m => m.ToString ())) + ")" : string.Empty,
 			                      ArrayDimension > 0 ? "[" + new string (',', ArrayDimension - 1) + "]" : string.Empty,
-			                      DescKind.ToString ()[0]);
+			                      DescKind.ToString ()[0],
+			                      Etc != 0 ? '(' + Etc.ToString () + ')' : string.Empty);
 			                      
 		}
 
@@ -174,7 +196,8 @@ namespace Monkeydoc.Ecma
 				&& ArrayDimension == other.ArrayDimension
 				&& (GenericTypeArguments == null || GenericTypeArguments.SequenceEqual (other.GenericTypeArguments))
 				&& (GenericMemberArguments == null || GenericMemberArguments.SequenceEqual (other.GenericMemberArguments))
-				&& (MemberArguments == null || MemberArguments.SequenceEqual (other.MemberArguments));
+				&& (MemberArguments == null || MemberArguments.SequenceEqual (other.MemberArguments))
+				&& Etc == other.Etc;
 		}
 
 		bool What (bool input)

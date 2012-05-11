@@ -17,14 +17,14 @@ namespace MonkeyDoc.Generators.Html
 			}
 		}
 
-		public string Export (Stream input)
+		public string Export (Stream input, Dictionary<string, string> extraArgs)
 		{
 			if (input == null)
 				return null;
 			return new StreamReader (input).ReadToEnd ();
 		}
 
-		public string Export (string input)
+		public string Export (string input, Dictionary<string, string> extraArgs)
 		{
 			if (string.IsNullOrEmpty (input))
 				return null;

@@ -4,6 +4,7 @@ using System.Xml;
 using System.Xml.Xsl;
 using System.Xml.XPath;
 using System.Reflection;
+using System.Collections.Generic;
 
 namespace MonkeyDoc.Generators.Html
 {
@@ -20,14 +21,14 @@ namespace MonkeyDoc.Generators.Html
 			transform.Load (xml_reader, null, null);
 		}
 
-		public string Export (Stream input)
+		public string Export (Stream input, Dictionary<string, string> extraArgs)
 		{
 			var output = new StringWriter ();
 			transform.Transform (new XPathDocument (input), null, output, null);
 			return output.ToString ();
 		}
 
-		public string Export (string input)
+		public string Export (string input, Dictionary<string, string> extraArgs)
 		{
 			var output = new StringWriter ();
 			transform.Transform (new XPathDocument (new StringReader (input)), null, output, null);

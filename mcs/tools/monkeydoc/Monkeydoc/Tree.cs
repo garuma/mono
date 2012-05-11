@@ -291,7 +291,7 @@ namespace MonkeyDoc
 	
 		public bool IsLeaf {
 			get {
-				return nodes == null;
+				return nodes == null || nodes.Count == 0;
 			}
 		}
 

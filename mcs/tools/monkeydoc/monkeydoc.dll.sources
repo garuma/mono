@@ -6,6 +6,7 @@ Monkeydoc/providers/man-provider.cs
 Monkeydoc/providers/ecmaspec-provider.cs
 Monkeydoc/providers/error-provider.cs
 Monkeydoc/providers/xhtml-provider.cs
+Monkeydoc/providers/ecma-provider.cs
 Monkeydoc/HelpSource.cs
 Monkeydoc/Tree.cs
 Monkeydoc/generator.cs
@@ -22,6 +23,7 @@ Monkeydoc/generators/html/Toc2Html.cs
 Monkeydoc/generators/html/Ecmaspec2Html.cs
 Monkeydoc/generators/html/Error2Html.cs
 Monkeydoc/generators/html/MonoBook2Html.cs
+Monkeydoc/generators/html/Ecma2Html.cs
 Monkeydoc/generators/html/Idem.cs
 Monkeydoc/generators/HtmlGenerator.cs
 Mono.Utilities/colorizer.cs
@@ -29,6 +31,8 @@ Mono.Utilities/LRUCache.cs
 Monkeydoc.Ecma/EcmaUrlParser.cs
 Monkeydoc.Ecma/EcmaUrlTokenizer.cs
 Monkeydoc.Ecma/EcmaDesc.cs
+Mono.Documentation/ManifestResourceResolver.cs
+Mono.Documentation/XmlDocUtils.cs
 Lucene.Net/Lucene.Net/Analysis/Analyzer.cs
 Lucene.Net/Lucene.Net/Analysis/ASCIIFoldingFilter.cs
 Lucene.Net/Lucene.Net/Analysis/BaseCharFilter.cs

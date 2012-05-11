@@ -69,9 +69,9 @@ namespace MonkeyDoc
 
 		public static RootTree LoadTree (string basedir)
 		{
-			if  (string.IsNullOrEmpty (basedir))
+			if (string.IsNullOrEmpty (basedir))
 				throw new ArgumentNullException ("basedir");
-			if  (!Directory.Exists (basedir))
+			if (!Directory.Exists (basedir))
 				throw new ArgumentException ("basedir", string.Format ("Base documentation directory at '{0}' doesn't exist", basedir));
 
 			XmlDocument xmlDocument = new XmlDocument ();
@@ -91,20 +91,20 @@ namespace MonkeyDoc
 			}
 			catch {}
 
-			if  (Directory.Exists ("/Library/Frameworks/Mono.framework/External/monodoc")) {
+			if (Directory.Exists ("/Library/Frameworks/Mono.framework/External/monodoc"))
 				enumerable = enumerable.Concat (Directory.EnumerateFiles ("/Library/Frameworks/Mono.framework/External/monodoc", "*.source"));
-			}
 			return enumerable;
 		}
 
 		public static RootTree LoadTree (string indexDir, XmlDocument docTree, IEnumerable<string> sourceFiles)
 		{
-			if  (docTree == null) {
+			if (docTree == null) {
 				docTree = new XmlDocument ();
 				using  (Stream manifestResourceStream = typeof (RootTree).Assembly.GetManifestResourceStream ("monodoc.xml")) {
 					docTree.Load (manifestResourceStream);
 				}
 			}
+
 			sourceFiles =  (sourceFiles ?? new string[0]);
 			RootTree rootTree = new RootTree ();
 			rootTree.basedir = indexDir;
@@ -112,13 +112,15 @@ namespace MonkeyDoc
 			rootTree.nameToNode["root"] = rootTree.RootNode;
 			rootTree.nameToNode["libraries"] = rootTree.RootNode;
 			rootTree.Populate (rootTree.RootNode, xml_node_list);
-			if  (rootTree.LookupEntryPoint ("various") == null) {
+
+			if (rootTree.LookupEntryPoint ("various") == null) {
 				Console.Error.WriteLine ("No 'various' doc node! Check monodoc.xml!");
 				Node rootNode = rootTree.RootNode;
 			}
-			foreach  (string current in sourceFiles) {
+
+			foreach (string current in sourceFiles)
 				rootTree.AddSourceFile (current);
-			}
+
 			RootTree.PurgeNode (rootTree.RootNode);
 			rootTree.RootNode.Sort ();
 			return rootTree;
@@ -127,17 +129,16 @@ namespace MonkeyDoc
 		public void AddSource (string sourcesDir)
 		{
 			IEnumerable<string> enumerable = Directory.EnumerateFiles (sourcesDir, "*.source");
-			foreach  (string current in enumerable) {
-				if  (!this.AddSourceFile (current)) {
+			foreach (string current in enumerable)
+				if (!this.AddSourceFile (current))
 					Console.Error.WriteLine ("Error: Could not load source file {0}", current);
-				}
-			}
 		}
+
 		public bool AddSourceFile (string sourceFile)
 		{
-			if  (this.loadedSourceFiles.Contains (sourceFile)) {
+			if (this.loadedSourceFiles.Contains (sourceFile))
 				return false;
-			}
+
 			Node node = this.LookupEntryPoint ("various") ?? base.RootNode;
 			XmlDocument xmlDocument = new XmlDocument ();
 			try {
@@ -146,50 +147,52 @@ namespace MonkeyDoc
 				bool result = false;
 				return result;
 			}
-			XmlNodeList xmlNodeList = xmlDocument.SelectNodes ("/monodoc/node");
-			if  (xmlNodeList.Count > 0) {
-				this.Populate (node, xmlNodeList);
-			}
-			XmlNodeList xmlNodeList2 = xmlDocument.SelectNodes ("/monodoc/source");
-			if  (xmlNodeList2 == null) {
+
+			XmlNodeList extra_nodes = xmlDocument.SelectNodes ("/monodoc/node");
+			if (extra_nodes.Count > 0)
+				this.Populate (node, extra_nodes);
+
+			XmlNodeList sources = xmlDocument.SelectNodes ("/monodoc/source");
+			if (sources == null) {
 				Console.Error.WriteLine ("Error: No <source> section found in the {0} file", sourceFile);
 				return false;
 			}
+
 			loadedSourceFiles.Add (sourceFile);
-			foreach  (XmlNode xmlNode in xmlNodeList2) {
-				XmlAttribute xmlAttribute = xmlNode.Attributes["provider"];
-				if  (xmlAttribute == null) {
-						Console.Error.WriteLine ("Error: no provider in <source>");
-				} else {
-					string innerText = xmlAttribute.InnerText;
-					xmlAttribute = xmlNode.Attributes["basefile"];
-					if  (xmlAttribute == null) {
-						Console.Error.WriteLine ("Error: no basefile in <source>");
-					} else {
-						string innerText2 = xmlAttribute.InnerText;
-						xmlAttribute = xmlNode.Attributes["path"];
-						if  (xmlAttribute == null) {
-							Console.Error.WriteLine ("Error: no path in <source>");
-						} else {
-							string innerText3 = xmlAttribute.InnerText;
-							string basefilepath = Path.Combine (Path.GetDirectoryName (sourceFile), innerText2);
-							HelpSource helpSource = RootTree.GetHelpSource (innerText, basefilepath);
-							if  (helpSource != null) {
-								helpSource.RootTree = this;
-								this.helpSources.Add (helpSource);
-								this.nameToHelpSource[innerText3] = helpSource;
-								Node node2 = this.LookupEntryPoint (innerText3);
-								if  (node2 == null) {
-									Console.Error.WriteLine ("node `{0}' is not defined on the documentation map", innerText3);
-									node2 = node;
-								}
-								foreach  (Node current in helpSource.Tree.RootNode.Nodes) {
-									node2.AddNode (current);
-								}
-								node2.Sort ();
-							}
-						}
+			foreach (XmlNode xmlNode in sources) {
+				XmlAttribute a = xmlNode.Attributes["provider"];
+				if (a == null) {
+					Console.Error.WriteLine ("Error: no provider in <source>");
+					continue;
+				}
+				string provider = a.InnerText;
+				a = xmlNode.Attributes["basefile"];
+				if (a == null) {
+					Console.Error.WriteLine ("Error: no basefile in <source>");
+					continue;
+				}
+				string basefile = a.InnerText;
+				a = xmlNode.Attributes["path"];
+				if (a == null) {
+					Console.Error.WriteLine ("Error: no path in <source>");
+					continue;
+				}
+				string path = a.InnerText;
+				string basefilepath = Path.Combine (Path.GetDirectoryName (sourceFile), basefile);
+				HelpSource helpSource = RootTree.GetHelpSource (provider, basefilepath);
+				if (helpSource != null) {
+					helpSource.RootTree = this;
+					this.helpSources.Add (helpSource);
+					this.nameToHelpSource[path] = helpSource;
+					Node node2 = this.LookupEntryPoint (path);
+					if (node2 == null) {
+						Console.Error.WriteLine ("node `{0}' is not defined on the documentation map", path);
+						node2 = node;
 					}
+					foreach (Node current in helpSource.Tree.RootNode.Nodes) {
+						node2.AddNode (current);
+					}
+					node2.Sort ();
 				}
 			}
 			return true;
@@ -198,19 +201,19 @@ namespace MonkeyDoc
 		static bool PurgeNode (Node node)
 		{
 			bool result = false;
-			if  (!node.Documented)
+			if (!node.Documented)
 			{
 				List<Node> list = new List<Node> ();
-				foreach  (Node current in node.Nodes)
+				foreach (Node current in node.Nodes)
 				{
 					bool flag = RootTree.PurgeNode (current);
-					if  (flag)
+					if (flag)
 					{
 						list.Add (current);
 					}
 				}
 				result =  (node.Nodes.Count == list.Count);
-				foreach  (Node current2 in list)
+				foreach (Node current2 in list)
 				{
 					node.DeleteNode (current2);
 				}
@@ -248,12 +251,15 @@ namespace MonkeyDoc
 				case "ecmaspec":
 					result = new EcmaSpecHelpSource (basefilepath, false);
 					break;
+				case "ecma":
+					result = new EcmaHelpSource (basefilepath, false);
+					break;
 				default:
 					Console.Error.WriteLine ("Error: Unknown provider specified: {0}", provider);
 					result = null;
 					break;
 				}
-			} catch  (FileNotFoundException) {
+			} catch (FileNotFoundException) {
 				Console.Error.WriteLine ("Error: did not find one of the files in sources/" + basefilepath);
 				result = null;
 			}
@@ -263,6 +269,8 @@ namespace MonkeyDoc
 		public static Provider GetProvider (string provider, params string[] basefilepaths)
 		{
 			switch (provider) {
+			case "ecma":
+				return new EcmaProvider (basefilepaths[0]);
 			case "ecmaspec":
 				return new EcmaSpecProvider (basefilepaths[0]);
 			case "error":
@@ -279,33 +287,32 @@ namespace MonkeyDoc
 
 		void Populate (Node parent, XmlNodeList xml_node_list)
 		{
-			IEnumerator enumerator = xml_node_list.GetEnumerator ();
-			foreach  (XmlNode xmlNode in xml_node_list) {
-				XmlAttribute xmlAttribute = xmlNode.Attributes["parent"];
+			foreach (XmlNode xmlNode in xml_node_list) {
+				XmlAttribute e = xmlNode.Attributes["parent"];
 				Node parent2 = null;
-				if  (xmlAttribute != null && this.nameToNode.TryGetValue (xmlAttribute.InnerText, out parent2)) {
-					xmlNode.Attributes.Remove (xmlAttribute);
-					this.Populate (parent2, xmlNode.SelectNodes ("."));
-				} else {
-					xmlAttribute = xmlNode.Attributes["label"];
-					if  (xmlAttribute == null) {
-						Console.Error.WriteLine ("`label' attribute missing in <node>");
-					} else {
-						string innerText = xmlAttribute.InnerText;
-						xmlAttribute = xmlNode.Attributes["name"];
-						if  (xmlAttribute == null) {
-							Console.Error.WriteLine ("`name' attribute missing in <node>");
-						} else {
-							string innerText2 = xmlAttribute.InnerText;
-							Node orCreateNode = parent.GetOrCreateNode (innerText, "root:/" + innerText2);
-							orCreateNode.EnsureNodes ();
-							this.nameToNode[innerText2] = orCreateNode;
-							XmlNodeList xmlNodeList = xmlNode.SelectNodes ("./node");
-							if  (xmlNodeList != null) {
-								this.Populate (orCreateNode, xmlNodeList);
-							}
-						}
-					}
+				if (e != null && this.nameToNode.TryGetValue (e.InnerText, out parent2)) {
+					xmlNode.Attributes.Remove (e);
+					Populate (parent2, xmlNode.SelectNodes ("."));
+					continue;
+				}
+				e = xmlNode.Attributes["label"];
+				if (e == null) {
+					Console.Error.WriteLine ("`label' attribute missing in <node>");
+					continue;
+				}
+				string label = e.InnerText;
+				e = xmlNode.Attributes["name"];
+				if (e == null) {
+					Console.Error.WriteLine ("`name' attribute missing in <node>");
+					continue;
+				}
+				string name = e.InnerText;
+				Node orCreateNode = parent.GetOrCreateNode (label, "root:/" + name);
+				orCreateNode.EnsureNodes ();
+				this.nameToNode[name] = orCreateNode;
+				XmlNodeList xmlNodeList = xmlNode.SelectNodes ("./node");
+				if (xmlNodeList != null) {
+					this.Populate (orCreateNode, xmlNodeList);
 				}
 			}
 		}
@@ -313,12 +320,13 @@ namespace MonkeyDoc
 		public Node LookupEntryPoint (string name)
 		{
 			Node result = null;
-			if  (!this.nameToNode.TryGetValue (name, out result))
+			if (!this.nameToNode.TryGetValue (name, out result))
 			{
 				result = null;
 			}
 			return result;
 		}
+
 		public TOutput RenderUrl<TOutput> (string url, IDocGenerator<TOutput> generator, out Node node)
 		{
 			node = null;
@@ -326,8 +334,10 @@ namespace MonkeyDoc
 			HelpSource helpSourceAndIdForUrl = this.GetHelpSourceAndIdForUrl (url, out internalId, out node);
 			return generator.Generate (helpSourceAndIdForUrl, internalId);
 		}
+
 		public HelpSource GetHelpSourceAndIdForUrl (string url, out string internalId, out Node node)
 		{
+			Console.WriteLine ("GetHSAndId with {0}", url);
 			node = null;
 			internalId = null;
 
@@ -337,9 +347,11 @@ namespace MonkeyDoc
 			HelpSource helpSource =  helpSources.Where (h => h.CanHandleUrl (url)).FirstOrDefault ();
 			if (helpSource == null)
 				return null;
+			Console.WriteLine ("HelpSource is uri {0}", helpSource.GetType ());
 			internalId = helpSource.GetInternalIdForUrl (url, out node);
 			return helpSource;
 		}
+
 		public HelpSource GetHelpSourceAndIdFromName (string name, out string internalId, out Node node)
 		{
 			Console.WriteLine ("name: {0}", name);
@@ -348,7 +360,7 @@ namespace MonkeyDoc
 			if (node == null)
 				Console.WriteLine (nameToNode.Select (kvp => string.Format ("{0}:{1}", kvp.Key, kvp.Value)).Aggregate ( (string e1, string e2) => e1 + ", " + e2));
 
-			return node == null ? null : node.Nodes.Select (n => n.Tree.HelpSource).Where (hs => != null).Distinct ().FirstOrDefault ();
+			return node == null ? null : node.Nodes.Select (n => n.Tree.HelpSource).Where (hs => hs != null).Distinct ().FirstOrDefault ();
 		}
 
 		public HelpSource GetHelpSourceFromId (int id)
@@ -358,7 +370,7 @@ namespace MonkeyDoc
 
 		public Stream GetImage (string url)
 		{
-			if  (url.StartsWith ("source-id:")) {
+			if (url.StartsWith ("source-id:")) {
 				string text = url.Substring (10);
 				int num = text.IndexOf (":");
 				string text2 = text.Substring (0, num);
@@ -379,7 +391,7 @@ namespace MonkeyDoc
 		public IndexReader GetIndex ()
 		{
 			string text = Path.Combine (this.basedir, "monodoc.index");
-			if  (File.Exists (text))
+			if (File.Exists (text))
 			{
 				return IndexReader.Load (text);
 			}
@@ -396,17 +408,16 @@ namespace MonkeyDoc
 		public void GenerateIndex ()
 		{
 			IndexMaker indexMaker = new IndexMaker ();
-			foreach  (HelpSource current in this.helpSources) {
+			foreach (HelpSource current in this.helpSources)
 				current.PopulateIndex (indexMaker);
-			}
 			string text = Path.Combine (this.basedir, "monodoc.index");
 			try {
 				indexMaker.Save (text);
-			} catch  (UnauthorizedAccessException) {
+			} catch (UnauthorizedAccessException) {
 				text = Path.Combine (ConfigurationManager.AppSettings["docDir"], "monodoc.index");
 				try {
 					indexMaker.Save (text);
-				} catch  (UnauthorizedAccessException) {
+				} catch (UnauthorizedAccessException) {
 					Console.WriteLine ("Unable to write index file in {0}", Path.Combine (ConfigurationManager.AppSettings["docDir"], "monodoc.index"));
 					return;
 				}
@@ -420,7 +431,7 @@ namespace MonkeyDoc
 		public SearchableIndex GetSearchIndex ()
 		{
 			string text = Path.Combine (this.basedir, "search_index");
-			if  (System.IO.Directory.Exists (text)) {
+			if (System.IO.Directory.Exists (text)) {
 				return SearchableIndex.Load (text);
 			}
 			text = Path.Combine (ConfigurationManager.AppSettings["docDir"], "search_index");
@@ -445,7 +456,7 @@ namespace MonkeyDoc
 			} catch (UnauthorizedAccessException) {
 				try {
 					text = Path.Combine (ConfigurationManager.AppSettings["docDir"], "search_index");
-					if  (!Directory.Exists (text))
+					if (!Directory.Exists (text))
 						Directory.CreateDirectory (text);
 					indexWriter = new IndexWriter (Mono.Lucene.Net.Store.FSDirectory.GetDirectory (text, true), new StandardAnalyzer (), true);
 				} catch (UnauthorizedAccessException) {

@@ -87,6 +87,38 @@ namespace MonoTests.MonkeyDoc.Ecma
 		}
 
 		[Test]
+		public void NamespaceValidTest ()
+		{
+			AssertValidUrl ("N:Foo.Bar");
+			AssertValidUrl ("N:Foo");
+			AssertValidUrl ("N:Foo.Bar.Baz");
+			AssertValidUrl ("N:A.B.C");
+
+			var ast = new EcmaDesc () { DescKind = EcmaDesc.Kind.Namespace,
+			                            Namespace = "Foo.Bar.Blop" };
+			AssertUrlDesc (ast, "N:Foo.Bar.Blop");
+		}
+
+		[Test]
+		public void ConstructorValidTest ()
+		{
+			AssertValidUrl ("C:Gendarme.Rules.Concurrency.DecorateThreadsRule.DecorateThreadsRule");
+			AssertValidUrl ("C:Gendarme.Rules.Concurrency.DecorateThreadsRule.DecorateThreadsRule()");
+			AssertValidUrl ("C:Gendarme.Rules.Concurrency.DecorateThreadsRule.DecorateThreadsRule(System.String)");
+		}
+
+		[Test]
+		public void MetaEtcNodeTest ()
+		{
+			AssertValidUrl ("T:Foo.Bar.Type/*");
+			var ast = new EcmaDesc () { DescKind = EcmaDesc.Kind.Type,
+			                            Namespace = "Foo.Bar",
+			                            TypeName = "Type",
+			                            Etc = '*' };
+			AssertUrlDesc (ast, "T:Foo.Bar.Type/*");
+		}
+
+		[Test]
 		public void SimpleTypeUrlParseTest ()
 		{
 			var ast = new EcmaDesc () { DescKind = EcmaDesc.Kind.Type,

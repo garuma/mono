@@ -13,8 +13,8 @@ namespace MonkeyDoc.Generators
 	interface IHtmlExporter
 	{
 		string CssCode { get; }
-		string Export (Stream input);
-		string Export (string input);
+		string Export (Stream input, Dictionary<string, string> extras);
+		string Export (string input, Dictionary<string, string> extras);
 	}
 
 	public class HtmlGenerator : IDocGenerator<string>
@@ -47,7 +47,7 @@ namespace MonkeyDoc.Generators
 		public string Generate (HelpSource hs, string id)
 		{
 			if (hs == null || string.IsNullOrEmpty (id))
-				return MakeHtmlError ("Your request has found no candidate provider");
+				return MakeHtmlError ("Your request has found no cand²idate provider");
 			var cache = defaultCache ?? hs.Cache;
 			if (cache != null && cache.IsCached (MakeCacheKey (hs, id)))
 			    return cache.GetCachedString (MakeCacheKey (hs, id));
@@ -59,13 +59,17 @@ namespace MonkeyDoc.Generators
 			if (hs.IsRawContent (id))
 				return hs.GetText (id) ?? string.Empty;
 
-			DocumentType type = hs.GetDocumentTypeForId (id);
+			Dictionary<string, string> extraParams = null;
+			DocumentType type = hs.GetDocumentTypeForId (id, out extraParams);
 
 			IHtmlExporter exporter;
 			if (!converters.TryGetValue (type, out exporter))
 				return MakeHtmlError (string.Format ("Input type '{0}' not supported",
 				                                     type.ToString ()));
-			var result = hs.IsGeneratedContent (id) ? exporter.Export (hs.GetCachedText (id)) : exporter.Export (hs.GetCachedHelpStream (id));
+			var result = hs.IsGeneratedContent (id) ? 
+				exporter.Export (hs.GetCachedText (id), extraParams) :
+				exporter.Export (hs.GetCachedHelpStream (id), extraParams);
+
 			if (cache != null)
 				cache.CacheText (MakeCacheKey (hs, id), result);
 			return result;

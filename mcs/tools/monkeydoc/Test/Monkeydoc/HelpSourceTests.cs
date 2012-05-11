@@ -13,13 +13,32 @@ namespace MonoTests.MonkeyDoc
 	{
 		class CheckGenerator : IDocGenerator<bool>
 		{
+			public string LastCheckMessage { get; set; }
+
 			public bool Generate (HelpSource hs, string id)
 			{
+				LastCheckMessage = string.Format ("#1 : {0} {1}", hs, id);
 				if (hs == null || string.IsNullOrEmpty (id))
 					return false;
+
+				// Stripe the arguments parts since we don't need it
+				var argIdx = id.LastIndexOf ('?');
+				if (argIdx != -1)
+					id = id.Substring (0, argIdx);
+
+				LastCheckMessage = string.Format ("#2 : {0} {1}", hs, id);
 				if (hs.IsRawContent (id))
 					return hs.GetText (id) != null;
 
+				IEnumerable<string> parts;
+				if (hs.IsMultiPart (id, out parts)) {
+					LastCheckMessage = string.Format ("#4 : {0} {1} ({2})", hs, id, string.Join (", ", parts));
+					foreach (var partId in parts)
+						if (!Generate (hs, partId))
+							return false;
+				}
+
+				LastCheckMessage = string.Format ("#3 : {0} {1}", hs, id);
 				return hs.IsGeneratedContent (id) ? hs.GetCachedText (id) != null : hs.GetCachedHelpStream (id) != null;
 			}
 		}
@@ -35,7 +54,8 @@ namespace MonoTests.MonkeyDoc
 			var generator = new CheckGenerator ();
 
 			foreach (var leaf in GetLeaves (rootTree.RootNode)) {
-				Assert.IsTrue (rootTree.RenderUrl (leaf.PublicUrl, generator, out result), leaf.PublicUrl);
+				Console.WriteLine ("===== NEW ======");
+				Assert.IsTrue (rootTree.RenderUrl (leaf.PublicUrl, generator, out result), generator.LastCheckMessage + " | " + leaf.PublicUrl);
 				Assert.IsTrue (leaf == result,
 				               string.Format ("{0} != {1}?", leaf.Element, result.Element));
 			}

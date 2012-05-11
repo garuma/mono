@@ -3,6 +3,7 @@ using System.IO;
 using System.Xml;
 using System.Xml.Xsl;
 using System.Xml.XPath;
+using System.Collections.Generic;
 
 namespace MonkeyDoc.Generators.Html
 {
@@ -31,12 +32,12 @@ namespace MonkeyDoc.Generators.Html
 			}
 		}
 
-		public string Export (Stream stream)
+		public string Export (Stream stream, Dictionary<string, string> extraArgs)
 		{
 			return Htmlize (new XPathDocument (stream));
 		}
 
-		public string Export (string input)
+		public string Export (string input, Dictionary<string, string> extraArgs)
 		{
 			return Htmlize (new XPathDocument (new StringReader (input)));
 		}

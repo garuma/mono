@@ -81,8 +81,9 @@ namespace MonkeyDoc.Providers
 			return nodesMap.TryGetValue (url, out result) ? result : null;
 		}
 
-		public override DocumentType GetDocumentTypeForId (string id)
+		public override DocumentType GetDocumentTypeForId (string id, out Dictionary<string, string> extraParams)
 		{
+			extraParams = null;
 			return id == "root:" ? DocumentType.TocXml : DocumentType.Man;
 		}
 

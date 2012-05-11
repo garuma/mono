@@ -93,6 +93,8 @@ namespace Monkeydoc.Ecma
 				return Token.INNER_TYPE_SEPARATOR;
 			case ':':
 				return Token.COLON;
+			case '/':
+				return Token.SLASH_SEPARATOR;
 			default:
 				return TokenizeIdentifierOrNumber (next);
 			}
@@ -106,7 +108,7 @@ namespace Monkeydoc.Ecma
 				return (int)current;
 			}
 
-			if (is_identifier_start_character (current)) {
+			if (is_identifier_start_character (current) || current == '*') {
 				ident.Clear ();
 				ident.Append (current);
 				int peek;

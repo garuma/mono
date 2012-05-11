@@ -305,8 +305,9 @@ namespace MonkeyDoc
 			}
 		}
 
-		public virtual DocumentType GetDocumentTypeForId (string id)
+		public virtual DocumentType GetDocumentTypeForId (string id, out Dictionary<string, string> extraParams)
 		{
+			extraParams = null;
 			return DocumentType.PlainText;
 		}
 
