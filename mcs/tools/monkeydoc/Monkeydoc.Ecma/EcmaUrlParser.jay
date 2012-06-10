@@ -54,8 +54,12 @@ namespace Monkeydoc.Ecma
                dest.GenericMemberArguments = orig.GenericMemberArguments;
             if (dest.MemberArguments == null)
                dest.MemberArguments = orig.MemberArguments;
-            if (orig.IsEtc)
+            if (orig.IsEtc) {
                dest.Etc = orig.Etc;
+               dest.EtcFilter = orig.EtcFilter;
+            }
+            if (orig.DescModifier != EcmaDesc.Mod.Normal)
+               dest.DescModifier = orig.DescModifier;
 
             return dest;
         }
@@ -84,6 +88,9 @@ namespace Monkeydoc.Ecma
 %token OP_ARRAY_OPEN
 %token OP_ARRAY_CLOSE
 %token SLASH_SEPARATOR
+%token STAR
+%token REF_ARG
+%token OUT_ARG
 
 %start expression
 
@@ -97,6 +104,7 @@ expression
         | 'C' COLON constructor_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Constructor }, (EcmaDesc)$3); }
         | 'P' COLON simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Property }, (EcmaDesc)$3); }
         | 'E' COLON simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Event }, (EcmaDesc)$3); }
+        | 'O' COLON simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Operator }, (EcmaDesc)$3); }
 
 /* i.e. id.id.id or id */
 dot_expression
@@ -119,12 +127,19 @@ type_expression
 
 type_expression_suffix
         : opt_generic_type_suffix opt_inner_type_description opt_array_definition opt_etc {
+                         bool nestedDescHasEtc = $2 != null && ((EcmaDesc)$2).IsEtc;
+                         EcmaDesc nestedType = (EcmaDesc)$2;
                          $$ = new EcmaDesc {
                             GenericTypeArguments = $1 as List<EcmaDesc>,
-                            NestedType = $2 as EcmaDesc,
+                            NestedType = nestedType,
                             ArrayDimension = $3 == null ? 0 : (int)$3,
-                            Etc = $4 != null ? ((string)$4)[0] : (char)0
+                            Etc = $4 != null ? ((Tuple<char, string>)$4).Item1 : nestedDescHasEtc ? nestedType.Etc : (char)0,
+                            EtcFilter = $4 != null ? ((Tuple<char, string>)$4).Item2 : nestedDescHasEtc ? nestedType.EtcFilter : null
                          };
+                         if (nestedDescHasEtc) {
+                            nestedType.Etc = (char)0;
+                            nestedType.EtcFilter = null;
+                         }
                      }
 
 opt_inner_type_description
@@ -141,7 +156,7 @@ generic_type_arg_list
         | generic_type_arg_list COMMA type_expression { ((List<EcmaDesc>)$1).Add ((EcmaDesc)$3); $$ = $1; }
 
 opt_array_definition
-        : /* empty */ { $$ = 0; }
+        : /* empty */ { $$ = EcmaDesc.Mod.Normal; }
         | OP_ARRAY_OPEN opt_array_definition_list OP_ARRAY_CLOSE { $$ = $2; }
 
 opt_array_definition_list
@@ -150,7 +165,12 @@ opt_array_definition_list
 
 opt_etc
         : /* empty */ { $$ = null; }
-        | SLASH_SEPARATOR IDENTIFIER { $$ = $2; }
+        | SLASH_SEPARATOR etc_identifier { $$ = Tuple.Create<char, string> (((string)$2)[0], null); }
+        | SLASH_SEPARATOR etc_identifier SLASH_SEPARATOR IDENTIFIER opt_generic_type_suffix { $$ = Tuple.Create<char, string> (((string)$2)[0], (string)$4 + ($5 == null ? string.Empty : "<" + string.Join (",", ((IEnumerable<EcmaDesc>)$5).Select (t => t.ToCompleteTypeName ())) + ">")); }
+
+etc_identifier
+        : STAR { $$ = "*"; }
+        | IDENTIFIER { $$ = $1; }
 
 method_expression
         : type_expression DOT IDENTIFIER opt_generic_type_suffix opt_arg_list_suffix { $$ = CopyFromEcmaDesc (new EcmaDesc {
@@ -170,10 +190,19 @@ method_expression
                       };
                 }
 
+arg_type_expression
+        : type_expression opt_arg_type_suffix { var desc = (EcmaDesc)$1; desc.DescModifier = (EcmaDesc.Mod)$2; $$ = desc; }
+
+opt_arg_type_suffix
+        : /* empty */ { $$ = EcmaDesc.Mod.Normal; }
+        | STAR { $$ = EcmaDesc.Mod.Pointer; }
+        | REF_ARG { $$ = EcmaDesc.Mod.Ref; }
+        | OUT_ARG { $$ = EcmaDesc.Mod.Out; }
+
 type_expression_list
         : /* empty */ { $$ = null; }
-        | type_expression { $$ = new List<EcmaDesc> () { (EcmaDesc)$1 }; }
-        | type_expression COMMA type_expression_list { ((List<EcmaDesc>)$3).Add ((EcmaDesc)$1); $$ = $3; }
+        | arg_type_expression { $$ = new List<EcmaDesc> () { (EcmaDesc)$1 }; }
+        | arg_type_expression COMMA type_expression_list { ((List<EcmaDesc>)$3).Add ((EcmaDesc)$1); $$ = $3; }
 
 simple_member_expression
         : dot_expression {

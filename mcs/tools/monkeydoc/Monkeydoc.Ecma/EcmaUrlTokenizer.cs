@@ -59,7 +59,7 @@ namespace Monkeydoc.Ecma
 		public int token ()
 		{
 			int token = xtoken ();
-			Console.WriteLine ("Current token {0} with value {1}", token, val == null ? "(none)" : val.ToString ());
+			//Console.WriteLine ("Current token {0} with value {1}", token, val == null ? "(none)" : val.ToString ());
 			if (token == Token.ERROR)
 				Console.WriteLine ("Problem at pos {0} after token {1}", current_pos, current_token);
 			current_token = token;
@@ -95,6 +95,16 @@ namespace Monkeydoc.Ecma
 				return Token.COLON;
 			case '/':
 				return Token.SLASH_SEPARATOR;
+			case '[':
+				return Token.OP_ARRAY_OPEN;
+			case ']':
+				return Token.OP_ARRAY_CLOSE;
+			case '*':
+				return Token.STAR;
+			case '&':
+				return Token.REF_ARG;
+			case '@':
+				return Token.OUT_ARG;
 			default:
 				return TokenizeIdentifierOrNumber (next);
 			}

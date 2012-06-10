@@ -238,7 +238,7 @@ namespace MonkeyDoc
 				int index = current.Nodes.BinarySearch (searchNode, NodeElementComparer.Instance);
 				if (index >= 0) {
 					Node n = current.Nodes[index];
-					Console.WriteLine ("Binarysearch success for {0} which fell on {1}", strippedUrl, n.Element);
+					//Console.WriteLine ("Binarysearch success for {0} which fell on {1}", strippedUrl, n.Element);
 					cache.Put (url, n);
 					return n;
 				}
@@ -249,7 +249,7 @@ namespace MonkeyDoc
 					return SlowMatchNode (Tree.RootNode, cache, strippedUrl);
 				}
 				current = current.Nodes [index - 1];
-				Console.WriteLine ("Binarysearch failed for {0}, next node check is {1}", strippedUrl, current.Element);
+				//Console.WriteLine ("Binarysearch failed for {0}, next node check is {1}", strippedUrl, current.Element);
 			} while (true);
 
 			return null;
@@ -262,7 +262,7 @@ namespace MonkeyDoc
 		 */
 		Node SlowMatchNode (Node current, LRUCache<string, Node> cache, string url)
 		{
-			Console.WriteLine ("Entering slow path for {0} starting from {1}", url, current.Element);
+			//Console.WriteLine ("Entering slow path for {0} starting from {1}", url, current.Element);
 			while (current != null) {
 				bool stop = true;
 				foreach (Node n in current.Nodes) {

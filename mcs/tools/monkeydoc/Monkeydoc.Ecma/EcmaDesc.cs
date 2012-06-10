@@ -19,6 +19,15 @@ namespace Monkeydoc.Ecma
 			Field,
 			Property,
 			Event,
+			Operator
+		}
+
+		public enum Mod
+		{
+			Normal,
+			Pointer,
+			Ref,
+			Out
 		}
 
 		public enum Format
@@ -28,6 +37,11 @@ namespace Monkeydoc.Ecma
 		}
 
 		public Kind DescKind {
+			get;
+			set;
+		}
+
+		public Mod DescModifier {
 			get;
 			set;
 		}
@@ -90,14 +104,23 @@ namespace Monkeydoc.Ecma
 			}
 		}
 
+		/* EtcFilter is only valid in some case of IsEtc when the inner part needs
+		 * to be further filtered e.g. in case we want a listing of the type overloads
+		 * Equals
+		 */
+		public string EtcFilter {
+			get;
+			set;
+		}
+
 		// Returns the TypeName and the generic/inner type information if existing
 		public string ToCompleteTypeName ()
 		{
 			var result = TypeName;
 			if (GenericTypeArguments != null)
-				result += "<" + string.Join (",", GenericTypeArguments.Select (t => t.ToCompleteTypeName ())) + ">";
+				result += FormatGenericArgs (GenericTypeArguments);
 			if (NestedType != null)
-				result += "+" + NestedType.ToCompleteTypeName ();
+				result += "." + NestedType.ToCompleteTypeName ();
 			if (ArrayDimension > 0)
 				result += "[" + new string (',', ArrayDimension - 1) + "]";
 
@@ -107,14 +130,13 @@ namespace Monkeydoc.Ecma
 		// Returns the member name with its generic types if existing
 		public string ToCompleteMemberName (Format format)
 		{
-			var result = MemberName;
+			var result = IsEtc && !string.IsNullOrEmpty (EtcFilter) ? EtcFilter : MemberName;
 			if (GenericMemberArguments != null)
-				result += "<" + string.Join (",", GenericMemberArguments.Select (t => t.ToCompleteTypeName ())) + ">";
+				result += FormatGenericArgs (GenericMemberArguments);
 			if (format == Format.WithArgs) {
 				result += '(';
 				if (MemberArguments != null && MemberArguments.Count > 0) {
-					var args = MemberArguments
-						.Select (a => (string.IsNullOrEmpty (a.Namespace) ? string.Empty : a.Namespace + ".") + a.ToCompleteTypeName ());
+					var args = MemberArguments.Select (a => FormatNamespace (a) + a.ToCompleteTypeName () + ModToString (a));
 					result += string.Join (",", args);
 				}
 				result += ')';
@@ -169,10 +191,10 @@ namespace Monkeydoc.Ecma
 			return string.Format ("({8}) {0}::{1}{2}{3}{7} {4}{5}{6} {9}",
 			                      Namespace,
 			                      TypeName,
-			                      GenericTypeArguments != null ? "<" + string.Join (",", GenericTypeArguments.Select (t => t.ToString ())) + ">" : string.Empty,
+			                      FormatGenericArgsFull (GenericTypeArguments),
 			                      NestedType != null ? "+" + NestedType.ToString () : string.Empty,
 			                      MemberName ?? string.Empty,
-			                      GenericMemberArguments != null ? "<" + string.Join (",", GenericMemberArguments.Select (t => t.ToString ())) + ">" : string.Empty,
+			                      FormatGenericArgsFull (GenericMemberArguments),
 			                      MemberArguments != null ? "(" + string.Join (",", MemberArguments.Select (m => m.ToString ())) + ")" : string.Empty,
 			                      ArrayDimension > 0 ? "[" + new string (',', ArrayDimension - 1) + "]" : string.Empty,
 			                      DescKind.ToString ()[0],
@@ -188,16 +210,17 @@ namespace Monkeydoc.Ecma
 
 		public bool Equals (EcmaDesc other)
 		{
-			return What (DescKind == other.DescKind)
+			return DescKind == other.DescKind
 				&& TypeName == other.TypeName
 				&& Namespace == other.Namespace
 				&& MemberName == other.MemberName
-				&& NestedType == other.NestedType
+				&& NestedType == other.NestedType || NestedType.Equals (other.NestedType)
 				&& ArrayDimension == other.ArrayDimension
 				&& (GenericTypeArguments == null || GenericTypeArguments.SequenceEqual (other.GenericTypeArguments))
 				&& (GenericMemberArguments == null || GenericMemberArguments.SequenceEqual (other.GenericMemberArguments))
 				&& (MemberArguments == null || MemberArguments.SequenceEqual (other.MemberArguments))
-				&& Etc == other.Etc;
+				&& Etc == other.Etc
+				&& EtcFilter == other.EtcFilter;
 		}
 
 		bool What (bool input)
@@ -205,6 +228,35 @@ namespace Monkeydoc.Ecma
 			if (!input)
 				throw new Exception ("Not equal");
 			return input;
+		}
+
+		string FormatNamespace (EcmaDesc desc)
+		{
+			return string.IsNullOrEmpty (desc.Namespace) ? string.Empty : desc.Namespace + ".";
+		}
+
+		string FormatGenericArgs (IEnumerable<EcmaDesc> genericArgs)
+		{
+			return genericArgs != null ? "<" + string.Join (",", genericArgs.Select (t => FormatNamespace (t) + t.ToCompleteTypeName ())) + ">" : string.Empty;
+		}
+
+		string FormatGenericArgsFull (IEnumerable<EcmaDesc> genericArgs)
+		{
+			return genericArgs != null ? "<" + string.Join (",", genericArgs.Select (t => t.ToString ())) + ">" : string.Empty;
+		}
+
+		string ModToString (EcmaDesc desc)
+		{
+			switch (desc.DescModifier) {
+			case Mod.Pointer:
+				return "*";
+			case Mod.Ref:
+				return "&";
+			case Mod.Out:
+				return "@";
+			default:
+				return string.Empty;
+			}
 		}
 	}
 }

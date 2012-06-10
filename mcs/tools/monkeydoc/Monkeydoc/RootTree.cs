@@ -337,7 +337,7 @@ namespace MonkeyDoc
 
 		public HelpSource GetHelpSourceAndIdForUrl (string url, out string internalId, out Node node)
 		{
-			Console.WriteLine ("GetHSAndId with {0}", url);
+			//Console.WriteLine ("GetHSAndId with {0}", url);
 			node = null;
 			internalId = null;
 
@@ -347,18 +347,18 @@ namespace MonkeyDoc
 			HelpSource helpSource =  helpSources.Where (h => h.CanHandleUrl (url)).FirstOrDefault ();
 			if (helpSource == null)
 				return null;
-			Console.WriteLine ("HelpSource is uri {0}", helpSource.GetType ());
+			//Console.WriteLine ("HelpSource is uri {0}", helpSource.GetType ());
 			internalId = helpSource.GetInternalIdForUrl (url, out node);
 			return helpSource;
 		}
 
 		public HelpSource GetHelpSourceAndIdFromName (string name, out string internalId, out Node node)
 		{
-			Console.WriteLine ("name: {0}", name);
+			//Console.WriteLine ("name: {0}", name);
 			internalId = "root:";
 			node = this.LookupEntryPoint (name);
-			if (node == null)
-				Console.WriteLine (nameToNode.Select (kvp => string.Format ("{0}:{1}", kvp.Key, kvp.Value)).Aggregate ( (string e1, string e2) => e1 + ", " + e2));
+			/*if (node == null)
+				Console.WriteLine (nameToNode.Select (kvp => string.Format ("{0}:{1}", kvp.Key, kvp.Value)).Aggregate ( (string e1, string e2) => e1 + ", " + e2));*/
 
 			return node == null ? null : node.Nodes.Select (n => n.Tree.HelpSource).Where (hs => hs != null).Distinct ().FirstOrDefault ();
 		}

@@ -186,6 +186,7 @@ namespace MonkeyDoc.Providers
 				case 'E':
 				case 'F':
 				case 'N':
+				case 'O':
 					return MatchNode (url) != null;
 				}
 			}
@@ -212,7 +213,7 @@ namespace MonkeyDoc.Providers
 		{
 			string url = string.Empty;
 			var type = GetNodeType (node);
-			Console.WriteLine ("GetPublicUrl {0} : {1} [{2}]", node.Element, node.Caption, type.ToString ());
+			//Console.WriteLine ("GetPublicUrl {0} : {1} [{2}]", node.Element, node.Caption, type.ToString ());
 			switch (type) {
 			case EcmaNodeType.Namespace:
 				return node.Element; // A namespace node has already a well formated internal url
@@ -229,10 +230,11 @@ namespace MonkeyDoc.Providers
 
 		string MakeTypeNodeUrl (Node node)
 		{
-			Console.WriteLine ("MakeTypeNodeUrl {0} : {1}", node.Element, node.Caption);
+			//Console.WriteLine ("MakeTypeNodeUrl {0} : {1}", node.Element, node.Caption);
 			// A Type node has a Element property of the form: 'ecma:{number}#{typename}/'
 			var hashIndex = node.Element.IndexOf ('#');
-			return "T:" + node.Parent.Caption + '.' + node.Element.Substring (hashIndex + 1, node.Element.Length - hashIndex - 2);
+			var typeName = node.Element.Substring (hashIndex + 1, node.Element.Length - hashIndex - 2);
+			return "T:" + node.Parent.Caption + '.' + typeName.Replace ('.', '+');
 		}
 
 		EcmaNodeType GetNodeType (Node node)
@@ -259,7 +261,7 @@ namespace MonkeyDoc.Providers
 		{
 			int i = 0;
 			for (; !node.Element.StartsWith ("root:/"); i++) {
-				Console.WriteLine ("\tLevel {0} : {1} {2}", i, node.Element, node.Caption);
+				//Console.WriteLine ("\tLevel {0} : {1} {2}", i, node.Element, node.Caption);
 				node = node.Parent;
 			}
 			return i - 1;
@@ -294,11 +296,11 @@ namespace MonkeyDoc.Providers
 
 		public override string GetInternalIdForUrl (string url, out Node node)
 		{
-			Console.WriteLine ("Ecma-hs GetInternalIdForUrl with {0}", url);
+			//Console.WriteLine ("Ecma-hs GetInternalIdForUrl with {0}", url);
 			node = MatchNode (url);
 			if (node == null)
 				Console.WriteLine ("Crappy crap");
-			Console.WriteLine ("Matched node is {0} : {1}", node.Element, node.Caption);
+			//Console.WriteLine ("Matched node is {0} : {1}", node.Element, node.Caption);
 			
 			var id = node.GetInternalUrl ();
 			if (id.StartsWith (UriPrefix))
@@ -327,29 +329,28 @@ namespace MonkeyDoc.Providers
 		public Node InternalMatchNode (string url)
 		{
 			Node result = null;
-			Console.WriteLine ("Ecma-hs MatchNode with {0}", url);
+			//Console.WriteLine ("Ecma-hs MatchNode with {0}", url);
 			EcmaDesc desc;
 			if (!parser.TryParse (url, out desc))
 				return null;
 
-			Console.WriteLine ("EcmaDesc: {0}", desc.ToString ());
+			//Console.WriteLine ("EcmaDesc: {0}", desc.ToString ());
 			// Namespace search
 			Node currentNode = Tree.RootNode;
 			Node searchNode = new Node () { Caption = desc.Namespace };
-			foreach (var n in currentNode.Nodes)
-				Console.WriteLine ("{0} : {1}", n.Element, n.Caption);
 			int index = currentNode.Nodes.BinarySearch (searchNode, EcmaGenericNodeComparer.Instance);
 			if (index >= 0)
 				result = currentNode.Nodes[index];
 			if (desc.DescKind == EcmaDesc.Kind.Namespace || index < 0)
 				return result;
 
-			Console.WriteLine ("Post NS");
+			//Console.WriteLine ("Post NS");
 
 			// Type search
 			currentNode = result;
 			result = null;
 			searchNode.Caption = desc.ToCompleteTypeName ();
+			Console.WriteLine ("Type search: {0}", searchNode.Caption);
 			index = currentNode.Nodes.BinarySearch (searchNode, EcmaTypeNodeComparer.Instance);
 			if (index >= 0)
 				result = currentNode.Nodes[index];
@@ -363,25 +364,31 @@ namespace MonkeyDoc.Providers
 			result = null;
 			var caption = desc.IsEtc ? EtcKindToCaption (desc.Etc) : MemberKindToCaption (desc.DescKind);
 			currentNode = FindNodeForCaption (currentNode.Nodes, caption);
-			if (currentNode == null || (desc.IsEtc && desc.DescKind == EcmaDesc.Kind.Type))
+			if (currentNode == null 
+			    || (desc.IsEtc && desc.DescKind == EcmaDesc.Kind.Type && string.IsNullOrEmpty (desc.EtcFilter)))
 				return currentNode;
 
-			Console.WriteLine ("Post caption");
+			//Console.WriteLine ("Post caption");
 
 			// Member search
 			result = null;
 			var format = desc.DescKind == EcmaDesc.Kind.Constructor ? EcmaDesc.Format.WithArgs : EcmaDesc.Format.WithoutArgs;
 			searchNode.Caption = desc.ToCompleteMemberName (format);
-			Console.WriteLine ("Member caption {0}", searchNode.Caption);
+			//Console.WriteLine ("Member caption {0}", searchNode.Caption);
 			index = currentNode.Nodes.BinarySearch (searchNode, EcmaGenericNodeComparer.Instance);
 			if (index < 0)
 				return null;
 			result = currentNode.Nodes[index];
-			if (result.Nodes.Count == 0)
+			if (result.Nodes.Count == 0 || desc.IsEtc)
 				return result;
 
+			//Console.WriteLine ("Post member");
+
 			// Overloads search
+			currentNode = result;
 			searchNode.Caption = desc.ToCompleteMemberName (EcmaDesc.Format.WithArgs);
+			//Console.WriteLine ("Overload caption: {0}", searchNode.Caption);
+			//Console.WriteLine ("Candidates: {0}", string.Join (", ", currentNode.Nodes.Select (n => n.Caption)));
 			index = currentNode.Nodes.BinarySearch (searchNode, EcmaGenericNodeComparer.Instance);
 			if (index < 0)
 				return result;
@@ -431,6 +438,8 @@ namespace MonkeyDoc.Providers
 				return "Fields";
 			case 'E':
 				return "Events";
+			case 'O':
+				return "Operators";
 			case '*':
 				return "Members";
 			default:
@@ -451,6 +460,8 @@ namespace MonkeyDoc.Providers
 				return "Fields";
 			case EcmaDesc.Kind.Event:
 				return "Events";
+			case EcmaDesc.Kind.Operator:
+				return "Operators";
 			default:
 				return null;
 			}

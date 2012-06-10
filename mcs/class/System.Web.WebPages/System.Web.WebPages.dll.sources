@@ -38,7 +38,7 @@ Assembly/AssemblyInfo.cs
 ../../../external/aspnetwebstack/src/System.Web.WebPages/GlobalSuppressions.cs
 ../../../external/aspnetwebstack/src/System.Web.WebPages/HelperPage.cs
 ../../../external/aspnetwebstack/src/System.Web.WebPages/HelperResult.cs
-../../../external/aspnetwebstack/src/System.Web.WebPages/Helpers/AntiForgeryConfig.cs
+#../../../external/aspnetwebstack/src/System.Web.WebPages/Helpers/AntiForgeryConfig.cs
 ../../../external/aspnetwebstack/src/System.Web.WebPages/Helpers/AntiForgery.cs
 ../../../external/aspnetwebstack/src/System.Web.WebPages/Helpers/AntiXsrf/AntiForgeryConfigWrapper.cs
 ../../../external/aspnetwebstack/src/System.Web.WebPages/Helpers/AntiXsrf/AntiForgeryToken.cs

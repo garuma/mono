@@ -60,6 +60,7 @@ namespace MonoTests.MonkeyDoc.Ecma
 			AssertValidUrl ("M:System.Foo.Int32<System.String+FooBar<System.Blop<T, U`2>>>.Foo()");
 			AssertValidUrl ("M:System.Foo.Int32<System.String+FooBar<System.Blop<T, U`2>>>.Foo(Bleh,Bar)");
 			AssertValidUrl ("M:System.Foo.Int32<System.String+FooBar<System.Blop<T, U`2>>>.Foo(Bleh<V>,Bar)");
+			AssertValidUrl ("M:Gendarme.Framework.Helpers.Log.WriteLine(string,string,object[])");
 		}
 
 		[Test]
@@ -69,6 +70,7 @@ namespace MonoTests.MonkeyDoc.Ecma
 			AssertValidUrl ("T:System.Foo.Int32");
 			AssertValidUrl ("T:System.Foo.Int32<System.String+FooBar`1>");
 			AssertValidUrl ("T:System.Foo.Int32<System.String+FooBar<System.Blop<T, U>>>");
+			AssertValidUrl ("T:System.Foo.Int32<T>");
 			AssertValidUrl ("T:System.Foo.Int32<T,U>");
 			AssertValidUrl ("T:System.Foo.Int32<System.String+FooBar<System.Blop<T, U>>>");
 			AssertValidUrl ("T:System.Foo.Int32<System.String+FooBar<System.Blop<T, U`2>>>");
@@ -105,17 +107,52 @@ namespace MonoTests.MonkeyDoc.Ecma
 			AssertValidUrl ("C:Gendarme.Rules.Concurrency.DecorateThreadsRule.DecorateThreadsRule");
 			AssertValidUrl ("C:Gendarme.Rules.Concurrency.DecorateThreadsRule.DecorateThreadsRule()");
 			AssertValidUrl ("C:Gendarme.Rules.Concurrency.DecorateThreadsRule.DecorateThreadsRule(System.String)");
+			AssertValidUrl ("C:Gendarme.Framework.Helpers.MethodSignature.MethodSignature(string,string,string[],System.Func<Mono.Cecil.MethodReference,System.Boolean>)");
+		}
+
+		[Test]
+		public void SlashExpressionValidTest ()
+		{
+			AssertValidUrl ("T:Foo.Bar.Type/*");
+			AssertValidUrl ("T:Foo.Bar.Type/M");
+			AssertValidUrl ("T:Gendarme.Framework.Bitmask<T>/M/Equals");
+			AssertValidUrl ("T:Gendarme.Framework.Helpers.Log/M/WriteLine<T>");
+		}
+
+		[Test]
+		public void MethodWithArgModValidTest ()
+		{
+			AssertValidUrl ("M:Foo.Bar.FooBar(int, System.Drawing.Imaging&)");
+			AssertValidUrl ("M:Foo.Bar.FooBar(int@, System.Drawing.Imaging)");
+			AssertValidUrl ("M:Foo.Bar.FooBar(int, System.Drawing.Imaging*)");
+			AssertValidUrl ("M:Foo.Bar.FooBar(int*, System.Drawing.Imaging&)");
+		}
+
+		[Test]
+		public void FieldValidTest ()
+		{
+			AssertValidUrl ("F:Mono.Terminal.Curses.KeyF10");
 		}
 
 		[Test]
 		public void MetaEtcNodeTest ()
 		{
-			AssertValidUrl ("T:Foo.Bar.Type/*");
 			var ast = new EcmaDesc () { DescKind = EcmaDesc.Kind.Type,
 			                            Namespace = "Foo.Bar",
 			                            TypeName = "Type",
 			                            Etc = '*' };
 			AssertUrlDesc (ast, "T:Foo.Bar.Type/*");
+		}
+
+		[Test]
+		public void MetaEtcWithInnerTypeTest ()
+		{
+			var ast = new EcmaDesc () { DescKind = EcmaDesc.Kind.Type,
+			                            Namespace = "Novell.Directory.Ldap",
+			                            TypeName = "Connection",
+			                            NestedType = new EcmaDesc { DescKind = EcmaDesc.Kind.Type, TypeName = "ReaderThread" },
+			                            Etc = '*' };
+			AssertUrlDesc (ast, "T:Novell.Directory.Ldap.Connection+ReaderThread/*");
 		}
 
 		[Test]

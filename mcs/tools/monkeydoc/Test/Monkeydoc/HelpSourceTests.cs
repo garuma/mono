@@ -55,9 +55,10 @@ namespace MonoTests.MonkeyDoc
 
 			foreach (var leaf in GetLeaves (rootTree.RootNode)) {
 				Console.WriteLine ("===== NEW ======");
+				Console.WriteLine ("===== Current node: {0} {1} ======", leaf.Element, leaf.Caption);
 				Assert.IsTrue (rootTree.RenderUrl (leaf.PublicUrl, generator, out result), generator.LastCheckMessage + " | " + leaf.PublicUrl);
 				Assert.IsTrue (leaf == result,
-				               string.Format ("{0} != {1}?", leaf.Element, result.Element));
+				               string.Format ("{0} != {1} // {2}?", leaf.Element, result.Element, leaf.PublicUrl));
 			}
 		}
 
