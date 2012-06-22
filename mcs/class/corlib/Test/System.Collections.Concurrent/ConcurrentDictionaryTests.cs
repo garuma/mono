@@ -98,6 +98,29 @@ namespace MonoTests.System.Collections.Concurrent
 		}
 		
 		[Test]
+		public void AddWithDuplicate()
+		{
+			Assert.IsFalse (map.TryAdd("foo", 6));
+		}
+
+		[Test]
+		public void AddBigNumberOfValue ()
+		{
+			const int count = 1000;
+			var map = new ConcurrentDictionary<string, int> ();
+			foreach (var i in Enumerable.Range (0, count)) {
+				Console.WriteLine ("foo" + i);
+				Assert.IsTrue (map.TryAdd ("foo" + i, i));
+			}
+			//Assert.AreEqual (count, map.Count);
+			int value;
+			foreach (var i in Enumerable.Range (0, count)) {
+				Assert.IsTrue (map.TryRemove ("foo" + i, out value), i.ToString ());
+				Assert.AreEqual (i, value, i.ToString ());
+			}
+		}
+		
+		[Test]
 		public void RemoveParallelTest ()
 		{
 			ParallelTestHelper.Repeat (delegate {
@@ -132,12 +155,6 @@ namespace MonoTests.System.Collections.Concurrent
 				Assert.IsFalse (map.TryGetValue ("bar", out value), "#2b");
 				Assert.IsFalse (map.TryGetValue ("foobar", out value), "#3b");
 			});
-		}
-		
-		[Test]
-		public void AddWithDuplicate()
-		{
-			Assert.IsFalse (map.TryAdd("foo", 6));
 		}
 		
 		[Test]
@@ -313,6 +330,20 @@ namespace MonoTests.System.Collections.Concurrent
 
 			foreach (var id in ids)
 				Assert.IsFalse (dict.TryGetValue (id, out result), id.ToString () + " (second)");
+		}
+
+		[Test]
+		public void ToArrayTest ()
+		{
+			var map = new ConcurrentDictionary<string, int> ();
+			var array = Enumerable.Range (0, 20).Select (i => new KeyValuePair<string, int> ("foo" + i, i)).ToArray ();
+			foreach (var item in array) {
+				var oldCount = map.Count;
+				map.TryAdd (item.Key, item.Value);
+				Assert.AreEqual (oldCount + 1, map.Count, item.ToString ());
+			}
+			var dictArray = map.ToArray ();
+			CollectionAssert.AreEquivalent (array, dictArray);
 		}
 	}
 }
