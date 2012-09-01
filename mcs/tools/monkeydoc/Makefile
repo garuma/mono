@@ -75,21 +75,9 @@ RESOURCE_FILES = \
 	Resources/toc-html.xsl           \
 	$(IMAGES)
 
-MAN_TEST_FILES = \
-	Test/man-provider-test.cs   \
-	Test/man-test1.1            \
-	Test/man-test1.html         \
-	Test/man-test2.1            \
-	Test/man-test2.html         \
-	Test/man-test3.1            \
-	Test/man-test3.html         \
-	Test/man-test4.1            \
-	Test/man-test4.html
-
 EXTRA_DISTFILES = \
 	monkeydoc.dll.config.in   \
-	$(RESOURCE_FILES)       \
-	$(MAN_TEST_FILES)
+	$(RESOURCE_FILES)
 
 LIB_MCS_FLAGS = \
 	/codepage:utf8                                                    \
@@ -122,6 +110,8 @@ LIB_MCS_FLAGS = \
 	/r:System.Xml.Linq.dll                                                 \
 	/r:System.Configuration.dll
 
+TEST_MCS_FLAGS = /r:System.Core.dll
+
 include ../../build/library.make
 
 $(the_lib): Makefile $(RESOURCE_FILES)
@@ -130,37 +120,6 @@ all-local: $(the_lib).config Monkeydoc.Ecma/EcmaUrlParser.cs
 
 $(the_lib).config: Makefile
 	sed 's,@monodoc_refdir@,$(mono_libdir)/monodoc,g' monkeydoc.dll.config.in > $@
-
-test: Test/man-provider-test.exe
-
-run-test-local: check-man-provider
-
-run-test-update: check-man-provider-update
-
-Test/man-provider-test.exe: Test/man-provider-test.cs $(the_lib)
-	$(CSCOMPILE) -target:exe -out:$@ $< /r:$(the_lib)
-
-my_mono = \
-	MONO_REGISTRY_PATH="$(HOME)/.mono/registry" \
-	$(TEST_RUNTIME) \
-	$(RUNTIME_FLAGS)
-
-check-man-provider: Test/man-provider-test.exe
-	$(my_mono) $< Test/man-test1.1 | diff - Test/man-test1.html
-	$(my_mono) $< Test/man-test2.1 | diff - Test/man-test2.html
-	$(my_mono) $< Test/man-test3.1 | diff - Test/man-test3.html
-	$(my_mono) $< Test/man-test4.1 | diff - Test/man-test4.html
-
-check-man-provider-update: Test/man-provider-test.exe
-	$(my_mono) $< Test/man-test1.1 > Test/man-test1.html
-	$(my_mono) $< Test/man-test2.1 > Test/man-test2.html
-	$(my_mono) $< Test/man-test3.1 > Test/man-test3.html
-	$(my_mono) $< Test/man-test4.1 > Test/man-test4.html
-
-clean-local: cleanup
-
-cleanup:
-	-rm -f Test/man-provider-test.exe*
 
 Monkeydoc.Ecma/EcmaUrlParser.cs: Monkeydoc.Ecma/EcmaUrlParser.jay $(topdir)/jay/skeleton.cs
 	$(topdir)/jay/jay $(JAY_FLAGS) < $(topdir)/jay/skeleton.cs $< > jay-tmp.out && mv jay-tmp.out $@

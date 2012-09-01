@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 
@@ -11,6 +12,8 @@ namespace MonoTests.MonkeyDoc
 	[TestFixture]
 	public class HelpSourceTest
 	{
+		const string BaseDir = "../../tools/monkeydoc/Test/monodoc/";
+
 		class CheckGenerator : IDocGenerator<bool>
 		{
 			public string LastCheckMessage { get; set; }
@@ -49,7 +52,7 @@ namespace MonoTests.MonkeyDoc
 		[Test]
 		public void ReachabilityTest ()
 		{
-			var rootTree = RootTree.LoadTree ("/home/jeremie/monodoc/");
+			var rootTree = RootTree.LoadTree (Path.GetFullPath (BaseDir));
 			Node result;
 			var generator = new CheckGenerator ();
 
