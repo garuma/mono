@@ -105,6 +105,8 @@ namespace Monkeydoc.Ecma
 				return Token.REF_ARG;
 			case '@':
 				return Token.OUT_ARG;
+			case '$':
+				return Token.EXPLICIT_IMPL_SEP;
 			default:
 				return TokenizeIdentifierOrNumber (next);
 			}

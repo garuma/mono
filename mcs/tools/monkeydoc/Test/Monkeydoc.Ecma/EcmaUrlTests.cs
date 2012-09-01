@@ -135,6 +135,12 @@ namespace MonoTests.MonkeyDoc.Ecma
 		}
 
 		[Test]
+		public void ExplicitMethodImplValidTest ()
+		{
+			AssertValidUrl ("M:Microsoft.Win32.RegistryKey$System.IDisposable.Dispose");
+		}
+
+		[Test]
 		public void MetaEtcNodeTest ()
 		{
 			var ast = new EcmaDesc () { DescKind = EcmaDesc.Kind.Type,
@@ -297,6 +303,26 @@ namespace MonoTests.MonkeyDoc.Ecma
 			                            GenericMemberArguments = generics
 			};
 			AssertUrlDesc (ast, "M:System.String.FooBar<Action<System.Single, int>>(System.String, System.Collections.Generic.Dictionary<K, V>)");
+		}
+
+		[Test]
+		public void ExplicitMethodImplementationParseTest ()
+		{
+			var inner = new EcmaDesc {
+				MemberName = "Dispose",
+				TypeName = "IDisposable",
+				Namespace = "System"
+			};
+			var ast = new EcmaDesc {
+				DescKind = EcmaDesc.Kind.Method,
+				TypeName = "RegistryKey",
+				Namespace = "Microsoft.Win32",
+				ExplicitImplMember = inner
+			};
+			AssertUrlDesc (ast, "M:Microsoft.Win32.RegistryKey$System.IDisposable.Dispose");
+			var actual = parser.Parse ("M:Microsoft.Win32.RegistryKey$System.IDisposable.Dispose");
+			Assert.IsNotNull (actual.ExplicitImplMember);
+			Assert.AreEqual ("System.IDisposable.Dispose", ast.ToCompleteMemberName (EcmaDesc.Format.WithoutArgs));
 		}
 
 		/*		[Test]

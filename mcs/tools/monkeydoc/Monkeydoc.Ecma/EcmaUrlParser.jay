@@ -60,6 +60,8 @@ namespace Monkeydoc.Ecma
             }
             if (orig.DescModifier != EcmaDesc.Mod.Normal)
                dest.DescModifier = orig.DescModifier;
+            if (orig.ExplicitImplMember != null)
+               dest.ExplicitImplMember = orig.ExplicitImplMember;
 
             return dest;
         }
@@ -91,6 +93,7 @@ namespace Monkeydoc.Ecma
 %token STAR
 %token REF_ARG
 %token OUT_ARG
+%token EXPLICIT_IMPL_SEP
 
 %start expression
 
@@ -188,6 +191,10 @@ method_expression
                            GenericMemberArguments = $2 as List<EcmaDesc>,
                            MemberArguments = SafeReverse ($3 as List<EcmaDesc>)
                       };
+                }
+        | type_expression EXPLICIT_IMPL_SEP method_expression { Console.WriteLine ("Pouet"); $$ = CopyFromEcmaDesc (new EcmaDesc {
+                           ExplicitImplMember = $3 as EcmaDesc
+                      }, (EcmaDesc)$1);
                 }
 
 arg_type_expression

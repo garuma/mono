@@ -222,7 +222,9 @@ namespace MonkeyDoc.Providers
 			case EcmaNodeType.Meta:
 				return MakeTypeNodeUrl (GetNodeTypeParent (node)) + GenerateMetaSuffix (node);
 			case EcmaNodeType.Member:
-				return GetNodeMemberTypeChar (node) + ":" + MakeTypeNodeUrl (GetNodeTypeParent (node)).Substring (2) + "." + node.Caption;
+				var typeChar = GetNodeMemberTypeChar (node);
+				var typeNode = MakeTypeNodeUrl (GetNodeTypeParent (node)).Substring (2);
+				return typeChar + ":" + typeNode + MakeMemberNodeUrl (node);
 			default:
 				return null;
 			}
@@ -235,6 +237,20 @@ namespace MonkeyDoc.Providers
 			var hashIndex = node.Element.IndexOf ('#');
 			var typeName = node.Element.Substring (hashIndex + 1, node.Element.Length - hashIndex - 2);
 			return "T:" + node.Parent.Caption + '.' + typeName.Replace ('.', '+');
+		}
+
+		string MakeMemberNodeUrl (Node node)
+		{
+			/* The goal here is to treat method which are explicit interface definition
+			 * such as 'void IDisposable.Dispose ()' for which the caption is a dot
+			 * expression thus colliding with the ecma parser.
+			 * If the first non-alpha character in the caption is a dot then we have an
+			 * explicit member implementation (we assume the interface has namespace)
+			 */
+			var firstNonAlpha = node.Caption.FirstOrDefault (c => !char.IsLetterOrDigit (c));
+			if (firstNonAlpha == '.')
+				return "$" + node.Caption;
+			return "." + node.Caption;
 		}
 
 		EcmaNodeType GetNodeType (Node node)
@@ -374,7 +390,7 @@ namespace MonkeyDoc.Providers
 			result = null;
 			var format = desc.DescKind == EcmaDesc.Kind.Constructor ? EcmaDesc.Format.WithArgs : EcmaDesc.Format.WithoutArgs;
 			searchNode.Caption = desc.ToCompleteMemberName (format);
-			//Console.WriteLine ("Member caption {0}", searchNode.Caption);
+			Console.WriteLine ("Member caption {0} {1} {2}", searchNode.Caption, desc.ExplicitImplMember != null, format);
 			index = currentNode.Nodes.BinarySearch (searchNode, EcmaGenericNodeComparer.Instance);
 			if (index < 0)
 				return null;

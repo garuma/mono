@@ -344,7 +344,7 @@ namespace MonkeyDoc
 			if (url.StartsWith ("root:/"))
 				return this.GetHelpSourceAndIdFromName (url.Substring ("root:/".Length), out internalId, out node);
 
-			HelpSource helpSource =  helpSources.Where (h => h.CanHandleUrl (url)).FirstOrDefault ();
+			HelpSource helpSource = helpSources.Where (h => h.CanHandleUrl (url)).FirstOrDefault ();
 			if (helpSource == null)
 				return null;
 			//Console.WriteLine ("HelpSource is uri {0}", helpSource.GetType ());

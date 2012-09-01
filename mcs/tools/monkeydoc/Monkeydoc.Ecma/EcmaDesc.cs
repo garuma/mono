@@ -113,6 +113,14 @@ namespace Monkeydoc.Ecma
 			set;
 		}
 
+		/* When a member is an explicit implementation of an interface member, we register
+		 * the member EcmaDesc with its interface parent here
+		 */
+		public EcmaDesc ExplicitImplMember {
+			get;
+			set;
+		}
+
 		// Returns the TypeName and the generic/inner type information if existing
 		public string ToCompleteTypeName ()
 		{
@@ -130,6 +138,10 @@ namespace Monkeydoc.Ecma
 		// Returns the member name with its generic types if existing
 		public string ToCompleteMemberName (Format format)
 		{
+			if (ExplicitImplMember != null) {
+				var impl = ExplicitImplMember;
+				return impl.Namespace + "." + impl.TypeName + "." + impl.ToCompleteMemberName (format);
+			}
 			var result = IsEtc && !string.IsNullOrEmpty (EtcFilter) ? EtcFilter : MemberName;
 			if (GenericMemberArguments != null)
 				result += FormatGenericArgs (GenericMemberArguments);
@@ -220,7 +232,8 @@ namespace Monkeydoc.Ecma
 				&& (GenericMemberArguments == null || GenericMemberArguments.SequenceEqual (other.GenericMemberArguments))
 				&& (MemberArguments == null || MemberArguments.SequenceEqual (other.MemberArguments))
 				&& Etc == other.Etc
-				&& EtcFilter == other.EtcFilter;
+				&& EtcFilter == other.EtcFilter
+				&& (ExplicitImplMember == null || ExplicitImplMember.Equals (other.ExplicitImplMember));
 		}
 
 		bool What (bool input)
