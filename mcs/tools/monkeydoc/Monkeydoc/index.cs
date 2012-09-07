@@ -247,7 +247,7 @@ namespace MonkeyDoc
 				string sa = (string) a;
 				string sb = (string) b;
 
-				return String.Compare (sa, sb, true);
+				return String.Compare (sa, sb, StringComparison.OrdinalIgnoreCase);
 			}
 		}
 	

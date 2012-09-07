@@ -418,7 +418,7 @@ namespace MonkeyDoc
 				}
 			}
 
-			return string.Compare (cap1, cap2, StringComparison.Ordinal);
+			return string.Compare (cap1, cap2, StringComparison.OrdinalIgnoreCase);
 		}
 	}
 

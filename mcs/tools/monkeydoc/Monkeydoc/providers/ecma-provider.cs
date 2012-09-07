@@ -246,10 +246,16 @@ namespace MonkeyDoc.Providers
 			 * expression thus colliding with the ecma parser.
 			 * If the first non-alpha character in the caption is a dot then we have an
 			 * explicit member implementation (we assume the interface has namespace)
+			 * We also handle operator conversion type by checking if the character is a space
+			 * (as in 'foo to bar') and we generate a corresponding conversion signature
 			 */
 			var firstNonAlpha = node.Caption.FirstOrDefault (c => !char.IsLetterOrDigit (c));
 			if (firstNonAlpha == '.')
 				return "$" + node.Caption;
+			if (firstNonAlpha == ' ') {
+				var parts = node.Caption.Split (' ');
+				return ".Conversion(" + parts[0] + ", " + parts[2] + ")";
+			}
 			return "." + node.Caption;
 		}
 
@@ -286,9 +292,9 @@ namespace MonkeyDoc.Providers
 		char GetNodeMemberTypeChar (Node node)
 		{
 			int level = GetNodeLevel (node);
-			// Only methods can be under a meta node, so in case the member level is
+			// Only methods/operators can be under a meta node, so in case the member level is
 			// deeper than normal (which indicate an overload meta), return 'M' directly
-			return level == 3 ? node.Parent.Element[0] : 'M';
+			return level == 3 ? node.Parent.Element[0] : node.Parent.Parent.Element[0];
 		}
 
 		Node GetNodeTypeParent (Node node)
@@ -312,23 +318,29 @@ namespace MonkeyDoc.Providers
 
 		public override string GetInternalIdForUrl (string url, out Node node)
 		{
-			//Console.WriteLine ("Ecma-hs GetInternalIdForUrl with {0}", url);
-			node = MatchNode (url);
-			if (node == null)
-				Console.WriteLine ("Crappy crap");
-			//Console.WriteLine ("Matched node is {0} : {1}", node.Element, node.Caption);
-			
-			var id = node.GetInternalUrl ();
+			var id = string.Empty;
+			node = null;
+
+			if (!url.StartsWith (EcmaPrefix)) {
+				node = MatchNode (url);
+				if (node == null)
+					Console.WriteLine ("Crappy crap");
+				id = node.GetInternalUrl ();
+			}
+
 			if (id.StartsWith (UriPrefix))
 				id = id.Substring (UriPrefix.Length);
 			else if (id.StartsWith ("N:"))
 				id = "xml.summary." + id.Substring ("N:".Length);
 
 			var hashIndex = id.IndexOf ('#');
-			if (hashIndex != -1)
+			var hash = string.Empty;
+			if (hashIndex != -1) {
+				hash = id.Substring (hashIndex + 1);
 				id = id.Substring (0, hashIndex);
+			}
 
-			return id + GetArgsForNode (node);
+			return id + GetArgs (hash, node);
 		}
 
 		public override Node MatchNode (string url)
@@ -390,15 +402,19 @@ namespace MonkeyDoc.Providers
 			result = null;
 			var format = desc.DescKind == EcmaDesc.Kind.Constructor ? EcmaDesc.Format.WithArgs : EcmaDesc.Format.WithoutArgs;
 			searchNode.Caption = desc.ToCompleteMemberName (format);
-			Console.WriteLine ("Member caption {0} {1} {2}", searchNode.Caption, desc.ExplicitImplMember != null, format);
+			Console.WriteLine ("Member caption {0}", searchNode.Caption);
 			index = currentNode.Nodes.BinarySearch (searchNode, EcmaGenericNodeComparer.Instance);
-			if (index < 0)
+			if (index < 0) {
+				foreach (var n in currentNode.Nodes)
+					Console.WriteLine (n.Caption);
 				return null;
+			}
 			result = currentNode.Nodes[index];
+			Console.WriteLine ("Member result: {0} {1} {2}", result.Caption, result.Nodes.Count, desc.IsEtc);
 			if (result.Nodes.Count == 0 || desc.IsEtc)
 				return result;
 
-			//Console.WriteLine ("Post member");
+			Console.WriteLine ("Post member");
 
 			// Overloads search
 			currentNode = result;
@@ -420,7 +436,10 @@ namespace MonkeyDoc.Providers
 
 			public int Compare (Node n1, Node n2)
 			{
-				return n1.Caption.CompareTo (n2.Caption);
+				/*var result = string.Compare (n1.Caption, n2.Caption, StringComparison.OrdinalIgnoreCase);
+				Console.WriteLine ("{0} {2} {1}", n1.Caption, n2.Caption, result == 0 ? '=' : result < 0 ? '<' : '>');
+				return result;*/
+				return string.Compare (n1.Caption, n2.Caption, StringComparison.OrdinalIgnoreCase);
 			}
 		}
 
@@ -431,7 +450,7 @@ namespace MonkeyDoc.Providers
 
 			public int Compare (Node n1, Node n2)
 			{
-				return Clear (n1.Caption).CompareTo (Clear ( n2.Caption));
+				return string.Compare (Clear (n1.Caption), Clear (n2.Caption), StringComparison.OrdinalIgnoreCase);
 			}
 
 			string Clear (string caption)
@@ -491,18 +510,23 @@ namespace MonkeyDoc.Providers
 			return null;
 		}
 
-		string GetArgsForNode (Node node)
+		string GetArgs (string hash, Node node)
 		{
 			var args = new Dictionary<string, string> ();
 			
 			args["source-id"] = SourceID.ToString ();
 			
-			switch (GetNodeType (node)) {
-			case EcmaNodeType.Namespace:
-				args["show"] = "namespace";
-				args["namespace"] =  node.Element.Substring ("N:".Length);
-				break;
+			if (node != null) {
+				switch (GetNodeType (node)) {
+				case EcmaNodeType.Namespace:
+					args["show"] = "namespace";
+					args["namespace"] =  node.Element.Substring ("N:".Length);
+					break;
+				}
 			}
+
+			if (!string.IsNullOrEmpty (hash))
+				args["hash"] = hash;
 
 			return "?" + string.Join ("&", args.Select (kvp => kvp.Key == kvp.Value ? kvp.Key : kvp.Key + '=' + kvp.Value));
 		}

@@ -47,10 +47,10 @@ namespace MonkeyDoc.Generators
 		public string Generate (HelpSource hs, string id)
 		{
 			if (hs == null || string.IsNullOrEmpty (id))
-				return MakeHtmlError ("Your request has found no cand²idate provider");
+				return MakeHtmlError ("Your request has found no candidate provider");
 			var cache = defaultCache ?? hs.Cache;
-			if (cache != null && cache.IsCached (MakeCacheKey (hs, id)))
-			    return cache.GetCachedString (MakeCacheKey (hs, id));
+			if (cache != null && cache.IsCached (MakeCacheKey (hs, id, null)))
+				return cache.GetCachedString (MakeCacheKey (hs, id, null));
 
 			IEnumerable<string> parts;
 			if (hs.IsMultiPart (id, out parts))
@@ -61,6 +61,8 @@ namespace MonkeyDoc.Generators
 
 			Dictionary<string, string> extraParams = null;
 			DocumentType type = hs.GetDocumentTypeForId (id, out extraParams);
+			if (cache != null && extraParams != null && cache.IsCached (MakeCacheKey (hs, id, extraParams)))
+				return cache.GetCachedString (MakeCacheKey (hs, id, extraParams));
 
 			IHtmlExporter exporter;
 			if (!converters.TryGetValue (type, out exporter))
@@ -71,7 +73,7 @@ namespace MonkeyDoc.Generators
 				exporter.Export (hs.GetCachedHelpStream (id), extraParams);
 
 			if (cache != null)
-				cache.CacheText (MakeCacheKey (hs, id), result);
+				cache.CacheText (MakeCacheKey (hs, id, extraParams), result);
 			return result;
 		}
 
@@ -83,7 +85,7 @@ namespace MonkeyDoc.Generators
 
 			var cache = defaultCache ?? hs.Cache;
 			if (cache != null)
-				cache.CacheText (MakeCacheKey (hs, originalId), sb.ToString ());
+				cache.CacheText (MakeCacheKey (hs, originalId, null), sb.ToString ());
 			return sb.ToString ();
 		}
 
@@ -114,9 +116,14 @@ namespace MonkeyDoc.Generators
 			return string.Format ("<html><head></head><body><p>{0}</p></body></html>", error);
 		}
 
-		string MakeCacheKey (HelpSource hs, string page)
+		string MakeCacheKey (HelpSource hs, string page, IDictionary<string,string> extraParams)
 		{
-			return cachePrefix + hs.SourceID + page;
+			var key = cachePrefix + hs.SourceID + page;
+			if (extraParams != null && extraParams.Count > 0) {
+				var paramPart = string.Join ("-", extraParams.Select (kvp => kvp.Key + kvp.Value));
+				key += '_' + paramPart;
+			}
+			return key;
 		}
 	}
 }

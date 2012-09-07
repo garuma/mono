@@ -135,6 +135,13 @@ namespace MonoTests.MonkeyDoc.Ecma
 		}
 
 		[Test]
+		public void PropertyValidTest ()
+		{
+			AssertValidUrl ("P:System.Foo.Bar");
+			AssertValidUrl ("P:System.ArraySegment<T>.Array");
+		}
+
+		[Test]
 		public void ExplicitMethodImplValidTest ()
 		{
 			AssertValidUrl ("M:Microsoft.Win32.RegistryKey$System.IDisposable.Dispose");

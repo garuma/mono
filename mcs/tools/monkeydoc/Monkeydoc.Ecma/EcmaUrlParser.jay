@@ -107,7 +107,7 @@ expression
         | 'C' COLON constructor_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Constructor }, (EcmaDesc)$3); }
         | 'P' COLON simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Property }, (EcmaDesc)$3); }
         | 'E' COLON simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Event }, (EcmaDesc)$3); }
-        | 'O' COLON simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Operator }, (EcmaDesc)$3); }
+        | 'O' COLON operator_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Operator }, (EcmaDesc)$3); }
 
 /* i.e. id.id.id or id */
 dot_expression
@@ -192,7 +192,7 @@ method_expression
                            MemberArguments = SafeReverse ($3 as List<EcmaDesc>)
                       };
                 }
-        | type_expression EXPLICIT_IMPL_SEP method_expression { Console.WriteLine ("Pouet"); $$ = CopyFromEcmaDesc (new EcmaDesc {
+        | type_expression EXPLICIT_IMPL_SEP method_expression { $$ = CopyFromEcmaDesc (new EcmaDesc {
                            ExplicitImplMember = $3 as EcmaDesc
                       }, (EcmaDesc)$1);
                 }
@@ -213,17 +213,28 @@ type_expression_list
 
 simple_member_expression
         : dot_expression {
-            var dotExpr = ((List<string>)$1);
-            dotExpr.Reverse ();
+                 var dotExpr = ((List<string>)$1);
+                 dotExpr.Reverse ();
 
-            $$ = new EcmaDesc {
-               Namespace = string.Join (".", dotExpr.Take (dotExpr.Count - 2)),
-               TypeName = dotExpr[dotExpr.Count - 2],
-               MemberName = dotExpr[dotExpr.Count - 1]
-            };
-        }
+                 $$ = new EcmaDesc {
+                      Namespace = string.Join (".", dotExpr.Take (dotExpr.Count - 2)),
+                      TypeName = dotExpr[dotExpr.Count - 2],
+                      MemberName = dotExpr[dotExpr.Count - 1]
+                 };
+             }
+        | type_expression DOT IDENTIFIER { $$ = CopyFromEcmaDesc (new EcmaDesc {
+                           MemberName = $3 as string,
+                      }, (EcmaDesc)$1);
+                }
+        | type_expression EXPLICIT_IMPL_SEP simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc {
+                           ExplicitImplMember = $3 as EcmaDesc
+                      }, (EcmaDesc)$1);
+                }
 
 constructor_expression
+        : method_expression { $$ = $1; }
+
+operator_expression
         : method_expression { $$ = $1; }
 
 /*simple_member_expression opt_arg_list_suffix { $$ = CopyFromEcmaDesc (new EcmaDesc {

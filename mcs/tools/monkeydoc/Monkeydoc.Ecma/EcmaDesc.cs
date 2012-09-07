@@ -138,13 +138,24 @@ namespace Monkeydoc.Ecma
 		// Returns the member name with its generic types if existing
 		public string ToCompleteMemberName (Format format)
 		{
+			/* We special process two cases:
+			 *   - Explicit member implementation which append a full type specification
+			 *   - Conversion operator which are exposed as normal method but have specific captioning in the end
+			 */
 			if (ExplicitImplMember != null) {
 				var impl = ExplicitImplMember;
 				return impl.Namespace + "." + impl.TypeName + "." + impl.ToCompleteMemberName (format);
+			} else if (format == Format.WithArgs && DescKind == Kind.Operator && MemberName == "Conversion") {
+				var type1 = MemberArguments[0].ToCompleteTypeName ();
+				var type2 = MemberArguments[1].ToCompleteTypeName ();
+				return string.Format ("{0} to {1}", type1, type2);
 			}
+
 			var result = IsEtc && !string.IsNullOrEmpty (EtcFilter) ? EtcFilter : MemberName;
+
 			if (GenericMemberArguments != null)
 				result += FormatGenericArgs (GenericMemberArguments);
+
 			if (format == Format.WithArgs) {
 				result += '(';
 				if (MemberArguments != null && MemberArguments.Count > 0) {

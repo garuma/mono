@@ -125,7 +125,7 @@ namespace Monkeydoc.Ecma
     "expression : 'C' COLON constructor_expression",
     "expression : 'P' COLON simple_member_expression",
     "expression : 'E' COLON simple_member_expression",
-    "expression : 'O' COLON simple_member_expression",
+    "expression : 'O' COLON operator_expression",
     "dot_expression : IDENTIFIER",
     "dot_expression : IDENTIFIER DOT dot_expression",
     "namespace_expression : dot_expression",
@@ -159,7 +159,10 @@ namespace Monkeydoc.Ecma
     "type_expression_list : arg_type_expression",
     "type_expression_list : arg_type_expression COMMA type_expression_list",
     "simple_member_expression : dot_expression",
+    "simple_member_expression : type_expression DOT IDENTIFIER",
+    "simple_member_expression : type_expression EXPLICIT_IMPL_SEP simple_member_expression",
     "constructor_expression : method_expression",
+    "operator_expression : method_expression",
     "opt_arg_list_suffix :",
     "opt_arg_list_suffix : OP_OPEN_PAREN type_expression_list OP_CLOSE_PAREN",
   };
@@ -538,15 +541,25 @@ case 41:
   case_41();
   break;
 case 42:
-#line 227 "Monkeydoc.Ecma/EcmaUrlParser.jay"
-  { yyVal = yyVals[0+yyTop]; }
+  case_42();
   break;
 case 43:
-#line 235 "Monkeydoc.Ecma/EcmaUrlParser.jay"
-  { yyVal = null; }
+  case_43();
   break;
 case 44:
-#line 236 "Monkeydoc.Ecma/EcmaUrlParser.jay"
+#line 235 "Monkeydoc.Ecma/EcmaUrlParser.jay"
+  { yyVal = yyVals[0+yyTop]; }
+  break;
+case 45:
+#line 238 "Monkeydoc.Ecma/EcmaUrlParser.jay"
+  { yyVal = yyVals[0+yyTop]; }
+  break;
+case 46:
+#line 246 "Monkeydoc.Ecma/EcmaUrlParser.jay"
+  { yyVal = null; }
+  break;
+case 47:
+#line 247 "Monkeydoc.Ecma/EcmaUrlParser.jay"
   { yyVal = yyVals[-1+yyTop]; }
   break;
 #line default
@@ -638,7 +651,7 @@ void case_31()
 
 void case_32()
 #line 195 "Monkeydoc.Ecma/EcmaUrlParser.jay"
-{ Console.WriteLine ("Pouet"); yyVal = CopyFromEcmaDesc (new EcmaDesc {
+{ yyVal = CopyFromEcmaDesc (new EcmaDesc {
                            ExplicitImplMember = yyVals[0+yyTop] as EcmaDesc
                       }, (EcmaDesc)yyVals[-2+yyTop]);
                 }
@@ -646,82 +659,99 @@ void case_32()
 void case_41()
 #line 215 "Monkeydoc.Ecma/EcmaUrlParser.jay"
 {
-            var dotExpr = ((List<string>)yyVals[0+yyTop]);
-            dotExpr.Reverse ();
+                 var dotExpr = ((List<string>)yyVals[0+yyTop]);
+                 dotExpr.Reverse ();
 
-            yyVal = new EcmaDesc {
-               Namespace = string.Join (".", dotExpr.Take (dotExpr.Count - 2)),
-               TypeName = dotExpr[dotExpr.Count - 2],
-               MemberName = dotExpr[dotExpr.Count - 1]
-            };
-        }
+                 yyVal = new EcmaDesc {
+                      Namespace = string.Join (".", dotExpr.Take (dotExpr.Count - 2)),
+                      TypeName = dotExpr[dotExpr.Count - 2],
+                      MemberName = dotExpr[dotExpr.Count - 1]
+                 };
+             }
+
+void case_42()
+#line 225 "Monkeydoc.Ecma/EcmaUrlParser.jay"
+{ yyVal = CopyFromEcmaDesc (new EcmaDesc {
+                           MemberName = yyVals[0+yyTop] as string,
+                      }, (EcmaDesc)yyVals[-2+yyTop]);
+                }
+
+void case_43()
+#line 229 "Monkeydoc.Ecma/EcmaUrlParser.jay"
+{ yyVal = CopyFromEcmaDesc (new EcmaDesc {
+                           ExplicitImplMember = yyVals[0+yyTop] as EcmaDesc
+                      }, (EcmaDesc)yyVals[-2+yyTop]);
+                }
 
 #line default
    static readonly short [] yyLhs  = {              -1,
-    0,    0,    0,    0,    0,    0,    0,    0,    6,    6,
-    2,    1,    7,    9,    9,    8,    8,    8,   12,   12,
-   10,   10,   13,   13,   11,   11,   11,   14,   14,    3,
-    3,    3,   16,   17,   17,   17,   17,   18,   18,   18,
-    4,    5,   15,   15,
+    0,    0,    0,    0,    0,    0,    0,    0,    7,    7,
+    2,    1,    8,   10,   10,    9,    9,    9,   13,   13,
+   11,   11,   14,   14,   12,   12,   12,   15,   15,    3,
+    3,    3,   17,   18,   18,   18,   18,   19,   19,   19,
+    4,    4,    4,    5,    6,   16,   16,
   };
    static readonly short [] yyLen = {           2,
     3,    3,    3,    3,    3,    3,    3,    3,    1,    3,
     1,    2,    4,    0,    2,    0,    2,    3,    1,    3,
     0,    3,    0,    2,    0,    2,    5,    1,    1,    5,
     3,    3,    2,    0,    1,    1,    1,    0,    1,    3,
-    1,    1,    0,    3,
+    1,    3,    3,    1,    1,    0,    3,
   };
    static readonly short [] yyDefRed = {            0,
     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
     0,    0,    0,    0,    0,    0,    0,    0,    1,    0,
-    2,   11,    0,    3,    0,    4,   41,   42,    5,    6,
-    7,    8,    0,    0,    0,   12,    0,    0,    0,    0,
-   10,   19,    0,   17,    0,    0,    0,   32,    0,   31,
-    0,   18,   15,    0,    0,    0,    0,    0,    0,   20,
-    0,    0,    0,   13,   30,   35,   36,   37,   33,    0,
-   44,   24,   22,   29,   28,    0,   40,    0,    0,   27,
+    2,   11,    0,    3,    0,    0,    4,    0,   44,    5,
+    6,    7,   45,    8,    0,    0,    0,   12,    0,    0,
+    0,    0,    0,    0,   10,   19,    0,   17,    0,    0,
+    0,   32,    0,   31,   42,   43,    0,   18,   15,    0,
+    0,    0,    0,    0,    0,   20,    0,    0,    0,   13,
+   30,   35,   36,   37,   33,    0,   47,   24,   22,   29,
+   28,    0,   40,    0,    0,   27,
   };
   protected static readonly short [] yyDgoto  = {             9,
-   23,   21,   24,   26,   29,   20,   36,   37,   46,   55,
-   64,   43,   62,   76,   50,   58,   69,   59,
+   23,   21,   24,   27,   30,   34,   20,   38,   39,   50,
+   61,   70,   47,   68,   82,   54,   64,   75,   65,
   };
-  protected static readonly short [] yySindex = {          -48,
- -246, -236, -220, -219, -209, -208, -207, -206,    0, -200,
- -200, -200, -200, -200, -200, -200, -200, -201,    0, -251,
-    0,    0, -255,    0, -251,    0,    0,    0,    0,    0,
-    0,    0, -200, -200, -198,    0, -199, -196, -200, -249,
-    0,    0, -221,    0, -200, -203, -251,    0, -200,    0,
- -200,    0,    0, -194, -202, -204, -226, -193, -197,    0,
- -194, -195, -235,    0,    0,    0,    0,    0,    0, -200,
-    0,    0,    0,    0,    0, -192,    0, -188, -251,    0,
+  protected static readonly short [] yySindex = {          -25,
+ -237, -227, -202, -201, -199, -198, -195, -194,    0, -212,
+ -212, -212, -212, -212, -212, -212, -212, -191,    0, -228,
+    0,    0, -246,    0, -228, -245,    0, -228,    0,    0,
+    0,    0,    0,    0, -212, -212, -189,    0, -192, -186,
+ -212, -247, -185, -212,    0,    0, -242,    0, -212, -193,
+ -228,    0, -212,    0,    0,    0, -212,    0,    0, -187,
+ -196, -190, -216, -183, -188,    0, -187, -184, -240,    0,
+    0,    0,    0,    0,    0, -212,    0,    0,    0,    0,
+    0, -182,    0, -179, -228,    0,
   };
   protected static readonly short [] yyRindex = {            0,
     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
     0,    0,    0,    0,    0,    0,    0,    1,    0,   17,
-    0,    0,    0,    0,  113,    0,    0,    0,    0,    0,
-    0,    0,    0,    0,    0,    0,   33,    0,    0,   92,
-    0,    0,    0,    0,    0,   65,    4,    0, -191,    0,
-    0,    0,    0, -190,   81,   72, -223, -186,    0,    0,
- -190,    0,    0,    0,    0,    0,    0,    0,    0, -191,
-    0,    0,    0,    0,    0,   97,    0,    0,   49,    0,
+    0,    0,    0,    0,  113,    0,    0,  114,    0,    0,
+    0,    0,    0,    0,    0,    0,    0,    0,   33,    0,
+    0,   92,    0,    0,    0,    0,    0,    0,    0,   65,
+    4,    0, -181,    0,    0,    0,    0,    0,    0, -180,
+   81,   82, -220, -177,    0,    0, -180,    0,    0,    0,
+    0,    0,    0,    0,    0, -181,    0,    0,    0,    0,
+    0,   97,    0,    0,   49,    0,
   };
   protected static readonly short [] yyGindex = {            0,
-  -10,    0,  -12,   35,    0,   -5,    0,  -22,    0,    0,
-    0,    0,   12,    0,   18,    0,    0,    6,
+  -10,    0,   10,    6,    0,    0,   -4,    0,  -23,    0,
+    0,    0,    0,   16,    0,   22,    0,    0,    9,
   };
   protected static readonly short [] yyTable = {            19,
-    9,   28,   40,   16,   38,   22,   25,   27,   25,   27,
-   27,   27,   34,   45,   35,   10,   16,   49,    5,   39,
-    7,    4,   74,   42,   56,   11,   48,   41,    3,    2,
-    8,    6,   14,   25,   53,    1,   75,   34,   57,   51,
-   60,   12,   13,   52,   34,   66,   67,   68,   16,   30,
-   31,   32,   14,   15,   16,   17,   80,   18,   33,   57,
-   44,   47,   49,   45,   21,   54,   61,   70,   63,   79,
-   71,   43,   72,   65,   73,   77,   38,    0,   78,   23,
-   25,   39,    0,    0,    0,    0,    0,    0,    0,    0,
-    0,   43,    0,    0,    0,    0,   26,    0,    0,    0,
+    9,   42,   26,   16,   26,   26,   22,   25,   28,   25,
+   28,   28,   25,   40,   43,   49,   16,   80,   57,   53,
+   31,   32,   58,   29,   10,   46,   33,   62,   41,   44,
+   45,   81,   14,   26,   11,   36,   25,   37,   59,   28,
+   34,    5,   63,    7,    4,   18,   66,   34,   16,   56,
+   52,    3,    2,    8,    6,   72,   73,   74,    1,   12,
+   13,   86,   14,   15,   21,   63,   16,   17,   35,   48,
+   49,   51,   55,   67,   69,   60,   53,   76,   85,   77,
+   25,   46,   78,   71,   83,   79,   38,    0,   84,   23,
+   39,   46,    0,    0,    0,    0,   26,    0,    0,    0,
     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
-    0,    0,   16,    0,    0,    0,    0,    0,    0,    0,
+    0,    0,   16,   41,    0,    0,    0,    0,    0,    0,
     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
     0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
@@ -747,22 +777,22 @@ void case_41()
    25,   25,    0,    0,    0,   25,    0,    0,   25,   25,
     0,   14,   25,   25,   25,   25,   26,   26,    0,    0,
    14,   26,   14,    0,   26,   26,   14,    0,   26,   26,
-   26,   26,   16,    0,    0,   16,    0,    0,    0,   16,
-    0,   16,    0,   16,    0,    0,    0,   16,
+   26,   26,   16,   16,    0,   16,   16,    0,    0,   16,
+    0,   16,   16,   16,   16,    0,    0,   16,   16,
   };
   protected static readonly short [] yyCheck = {            10,
-    0,   14,   25,    0,  260,   11,   12,   13,   14,   15,
-   16,   17,  264,  263,  266,  262,    0,  267,   67,  275,
-   69,   70,  258,   34,   47,  262,   39,   33,   77,   78,
-   79,   80,    0,   39,   45,   84,  272,  261,   49,  261,
-   51,  262,  262,  265,  268,  272,  273,  274,    0,   15,
-   16,   17,  262,  262,  262,  262,   79,  258,  260,   70,
-  259,  258,  267,  263,    0,  269,  261,  261,  271,  258,
-  268,    0,   61,   56,  270,   70,  268,   -1,  271,  270,
-    0,  268,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-   -1,    0,   -1,   -1,   -1,   -1,    0,   -1,   -1,   -1,
+    0,   25,   13,    0,   15,   16,   11,   12,   13,   14,
+   15,   16,   17,  260,  260,  263,    0,  258,  261,  267,
+   15,   16,  265,   14,  262,   36,   17,   51,  275,  275,
+   35,  272,    0,   44,  262,  264,   41,  266,   49,   44,
+  261,   67,   53,   69,   70,  258,   57,  268,    0,   44,
+   41,   77,   78,   79,   80,  272,  273,  274,   84,  262,
+  262,   85,  262,  262,    0,   76,  262,  262,  260,  259,
+  263,  258,  258,  261,  271,  269,  267,  261,  258,  268,
+    0,    0,   67,   62,   76,  270,  268,   -1,  271,  270,
+  268,    0,   -1,   -1,   -1,   -1,    0,   -1,   -1,   -1,
    -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
-   -1,   -1,    0,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
+   -1,   -1,    0,    0,   -1,   -1,   -1,   -1,   -1,   -1,
    -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
    -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
    -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,   -1,
@@ -788,11 +818,11 @@ void case_41()
   260,  261,   -1,   -1,   -1,  265,   -1,   -1,  268,  269,
    -1,  260,  272,  273,  274,  275,  260,  261,   -1,   -1,
   269,  265,  271,   -1,  268,  269,  275,   -1,  272,  273,
-  274,  275,  260,   -1,   -1,  263,   -1,   -1,   -1,  267,
-   -1,  269,   -1,  271,   -1,   -1,   -1,  275,
+  274,  275,  260,  260,   -1,  263,  263,   -1,   -1,  267,
+   -1,  269,  269,  271,  271,   -1,   -1,  275,  275,
   };
 
-#line 239 "Monkeydoc.Ecma/EcmaUrlParser.jay"
+#line 250 "Monkeydoc.Ecma/EcmaUrlParser.jay"
 
 }
 #line default
