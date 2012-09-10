@@ -108,6 +108,7 @@ namespace MonoTests.MonkeyDoc.Ecma
 			AssertValidUrl ("C:Gendarme.Rules.Concurrency.DecorateThreadsRule.DecorateThreadsRule()");
 			AssertValidUrl ("C:Gendarme.Rules.Concurrency.DecorateThreadsRule.DecorateThreadsRule(System.String)");
 			AssertValidUrl ("C:Gendarme.Framework.Helpers.MethodSignature.MethodSignature(string,string,string[],System.Func<Mono.Cecil.MethodReference,System.Boolean>)");
+			AssertValidUrl ("C:System.Collections.Generic.Dictionary<TKey,TValue>+KeyCollection.Dictionary<TKey,TValue>.KeyCollection(System.Collections.Generic.Dictionary<TKey,TValue>)");
 		}
 
 		[Test]
@@ -126,6 +127,12 @@ namespace MonoTests.MonkeyDoc.Ecma
 			AssertValidUrl ("M:Foo.Bar.FooBar(int@, System.Drawing.Imaging)");
 			AssertValidUrl ("M:Foo.Bar.FooBar(int, System.Drawing.Imaging*)");
 			AssertValidUrl ("M:Foo.Bar.FooBar(int*, System.Drawing.Imaging&)");
+		}
+
+		[Test]
+		public void MethodWithInnerTypeValidTest ()
+		{
+			AssertValidUrl ("M:System.TimeZoneInfo+AdjustmentRule.CreateAdjustmentRule");
 		}
 
 		[Test]

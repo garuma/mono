@@ -223,8 +223,9 @@ namespace MonkeyDoc.Providers
 				return MakeTypeNodeUrl (GetNodeTypeParent (node)) + GenerateMetaSuffix (node);
 			case EcmaNodeType.Member:
 				var typeChar = GetNodeMemberTypeChar (node);
-				var typeNode = MakeTypeNodeUrl (GetNodeTypeParent (node)).Substring (2);
-				return typeChar + ":" + typeNode + MakeMemberNodeUrl (node);
+				var parentNode = GetNodeTypeParent (node);
+				var typeNode = MakeTypeNodeUrl (parentNode).Substring (2);
+				return typeChar + ":" + typeNode + MakeMemberNodeUrl (typeChar, parentNode, node);
 			default:
 				return null;
 			}
@@ -232,31 +233,36 @@ namespace MonkeyDoc.Providers
 
 		string MakeTypeNodeUrl (Node node)
 		{
-			//Console.WriteLine ("MakeTypeNodeUrl {0} : {1}", node.Element, node.Caption);
 			// A Type node has a Element property of the form: 'ecma:{number}#{typename}/'
 			var hashIndex = node.Element.IndexOf ('#');
 			var typeName = node.Element.Substring (hashIndex + 1, node.Element.Length - hashIndex - 2);
 			return "T:" + node.Parent.Caption + '.' + typeName.Replace ('.', '+');
 		}
 
-		string MakeMemberNodeUrl (Node node)
+		string MakeMemberNodeUrl (char typeChar, Node typeNode, Node node)
 		{
+			// We clean inner type ctor name which may contain the outer type name
+			var caption = node.Caption;
+			if (typeChar == 'C') {
+				
+			}
+
 			/* The goal here is to treat method which are explicit interface definition
 			 * such as 'void IDisposable.Dispose ()' for which the caption is a dot
 			 * expression thus colliding with the ecma parser.
 			 * If the first non-alpha character in the caption is a dot then we have an
 			 * explicit member implementation (we assume the interface has namespace)
-			 * We also handle operator conversion type by checking if the character is a space
+			 * We also handle type conversion operator by checking if the name contains " to "
 			 * (as in 'foo to bar') and we generate a corresponding conversion signature
 			 */
-			var firstNonAlpha = node.Caption.FirstOrDefault (c => !char.IsLetterOrDigit (c));
+			var firstNonAlpha = caption.FirstOrDefault (c => !char.IsLetterOrDigit (c));
 			if (firstNonAlpha == '.')
-				return "$" + node.Caption;
-			if (firstNonAlpha == ' ') {
-				var parts = node.Caption.Split (' ');
-				return ".Conversion(" + parts[0] + ", " + parts[2] + ")";
+				return "$" + caption;
+			if (typeChar == 'O' && caption.IndexOf (" to ") != -1) {
+				var parts = caption.Split (' ');
+				return "." + node.Parent.Caption + "(" + parts[0] + ", " + parts[2] + ")";
 			}
-			return "." + node.Caption;
+			return "." + caption;
 		}
 
 		EcmaNodeType GetNodeType (Node node)
@@ -378,14 +384,14 @@ namespace MonkeyDoc.Providers
 			currentNode = result;
 			result = null;
 			searchNode.Caption = desc.ToCompleteTypeName ();
-			Console.WriteLine ("Type search: {0}", searchNode.Caption);
+			//Console.WriteLine ("Type search: {0}", searchNode.Caption);
 			index = currentNode.Nodes.BinarySearch (searchNode, EcmaTypeNodeComparer.Instance);
 			if (index >= 0)
 				result = currentNode.Nodes[index];
 			if ((desc.DescKind == EcmaDesc.Kind.Type && !desc.IsEtc) || index < 0)
 				return result;
 
-			Console.WriteLine ("Post Type");
+			//Console.WriteLine ("Post Type");
 
 			// Member selection
 			currentNode = result;
@@ -402,7 +408,7 @@ namespace MonkeyDoc.Providers
 			result = null;
 			var format = desc.DescKind == EcmaDesc.Kind.Constructor ? EcmaDesc.Format.WithArgs : EcmaDesc.Format.WithoutArgs;
 			searchNode.Caption = desc.ToCompleteMemberName (format);
-			Console.WriteLine ("Member caption {0}", searchNode.Caption);
+			//Console.WriteLine ("Member caption {0}", searchNode.Caption);
 			index = currentNode.Nodes.BinarySearch (searchNode, EcmaGenericNodeComparer.Instance);
 			if (index < 0) {
 				foreach (var n in currentNode.Nodes)
@@ -410,11 +416,11 @@ namespace MonkeyDoc.Providers
 				return null;
 			}
 			result = currentNode.Nodes[index];
-			Console.WriteLine ("Member result: {0} {1} {2}", result.Caption, result.Nodes.Count, desc.IsEtc);
+			//Console.WriteLine ("Member result: {0} {1} {2}", result.Caption, result.Nodes.Count, desc.IsEtc);
 			if (result.Nodes.Count == 0 || desc.IsEtc)
 				return result;
 
-			Console.WriteLine ("Post member");
+			//Console.WriteLine ("Post member");
 
 			// Overloads search
 			currentNode = result;

@@ -128,6 +128,15 @@ type_expression
                          }, (EcmaDesc)$2);
                      }
 
+/* To be used in types with no namespaces attached to them like an inner type*/
+reduced_type_expression
+        : IDENTIFIER type_expression_suffix {
+                         $$ = CopyFromEcmaDesc (new EcmaDesc {
+                            DescKind = EcmaDesc.Kind.Type,
+                            TypeName = $1 as string
+                         }, (EcmaDesc)$2);
+                     }
+
 type_expression_suffix
         : opt_generic_type_suffix opt_inner_type_description opt_array_definition opt_etc {
                          bool nestedDescHasEtc = $2 != null && ((EcmaDesc)$2).IsEtc;
@@ -147,7 +156,7 @@ type_expression_suffix
 
 opt_inner_type_description
         : /* empty */ { $$ = null; }
-        | INNER_TYPE_SEPARATOR type_expression { $$ = $2; }
+        | INNER_TYPE_SEPARATOR reduced_type_expression { $$ = $2; }
 
 opt_generic_type_suffix
         : /* empty */ { $$ = null; }

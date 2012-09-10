@@ -122,13 +122,13 @@ namespace Monkeydoc.Ecma
 		}
 
 		// Returns the TypeName and the generic/inner type information if existing
-		public string ToCompleteTypeName ()
+		public string ToCompleteTypeName (char innerTypeSeparator = '.')
 		{
 			var result = TypeName;
 			if (GenericTypeArguments != null)
 				result += FormatGenericArgs (GenericTypeArguments);
 			if (NestedType != null)
-				result += "." + NestedType.ToCompleteTypeName ();
+				result += innerTypeSeparator + NestedType.ToCompleteTypeName ();
 			if (ArrayDimension > 0)
 				result += "[" + new string (',', ArrayDimension - 1) + "]";
 
@@ -144,10 +144,10 @@ namespace Monkeydoc.Ecma
 			 */
 			if (ExplicitImplMember != null) {
 				var impl = ExplicitImplMember;
-				return impl.Namespace + "." + impl.TypeName + "." + impl.ToCompleteMemberName (format);
-			} else if (format == Format.WithArgs && DescKind == Kind.Operator && MemberName == "Conversion") {
-				var type1 = MemberArguments[0].ToCompleteTypeName ();
-				var type2 = MemberArguments[1].ToCompleteTypeName ();
+				return impl.Namespace + "." + impl.ToCompleteTypeName () + "." + impl.ToCompleteMemberName (format);
+			} else if (format == Format.WithArgs && DescKind == Kind.Operator && MemberName.EndsWith ("Conversion")) {
+				var type1 = MemberArguments[0].ToCompleteTypeName () + ModToString (MemberArguments[0]);
+				var type2 = MemberArguments[1].ToCompleteTypeName () + ModToString (MemberArguments[1]);
 				return string.Format ("{0} to {1}", type1, type2);
 			}
 
@@ -159,7 +159,7 @@ namespace Monkeydoc.Ecma
 			if (format == Format.WithArgs) {
 				result += '(';
 				if (MemberArguments != null && MemberArguments.Count > 0) {
-					var args = MemberArguments.Select (a => FormatNamespace (a) + a.ToCompleteTypeName () + ModToString (a));
+					var args = MemberArguments.Select (a => FormatNamespace (a) + a.ToCompleteTypeName ('+') + ModToString (a));
 					result += string.Join (",", args);
 				}
 				result += ')';
