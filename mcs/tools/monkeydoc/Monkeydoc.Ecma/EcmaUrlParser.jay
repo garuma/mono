@@ -105,7 +105,7 @@ expression
         | 'M' COLON method_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Method }, (EcmaDesc)$3); }
         | 'F' COLON simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Field }, (EcmaDesc)$3); }
         | 'C' COLON constructor_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Constructor }, (EcmaDesc)$3); }
-        | 'P' COLON simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Property }, (EcmaDesc)$3); }
+        | 'P' COLON property_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Property }, (EcmaDesc)$3); }
         | 'E' COLON simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Event }, (EcmaDesc)$3); }
         | 'O' COLON operator_expression { $$ = CopyFromEcmaDesc (new EcmaDesc { DescKind = EcmaDesc.Kind.Operator }, (EcmaDesc)$3); }
 
@@ -245,6 +245,14 @@ constructor_expression
 
 operator_expression
         : method_expression { $$ = $1; }
+
+property_expression
+        : simple_member_expression opt_property_indexer { $$ = CopyFromEcmaDesc (new EcmaDesc {
+                           MemberArguments = SafeReverse ($2 as List<EcmaDesc>)
+                      }, (EcmaDesc)$1); }
+
+opt_property_indexer
+        : opt_arg_list_suffix { $$ = $1; }
 
 /*simple_member_expression opt_arg_list_suffix { $$ = CopyFromEcmaDesc (new EcmaDesc {
                            MemberArguments = SafeReverse ($2 as List<EcmaDesc>)

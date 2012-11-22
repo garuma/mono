@@ -61,6 +61,8 @@ namespace MonoTests.MonkeyDoc.Ecma
 			AssertValidUrl ("M:System.Foo.Int32<System.String+FooBar<System.Blop<T, U`2>>>.Foo(Bleh,Bar)");
 			AssertValidUrl ("M:System.Foo.Int32<System.String+FooBar<System.Blop<T, U`2>>>.Foo(Bleh<V>,Bar)");
 			AssertValidUrl ("M:Gendarme.Framework.Helpers.Log.WriteLine(string,string,object[])");
+			AssertValidUrl ("M:Mono.Security.X509.Extensions.SubjectKeyIdentifierExtension.Decode");
+			AssertValidUrl ("M:Mono.Security.PKCS7.IssuerAndSerialNumber");
 		}
 
 		[Test]
@@ -108,7 +110,7 @@ namespace MonoTests.MonkeyDoc.Ecma
 			AssertValidUrl ("C:Gendarme.Rules.Concurrency.DecorateThreadsRule.DecorateThreadsRule()");
 			AssertValidUrl ("C:Gendarme.Rules.Concurrency.DecorateThreadsRule.DecorateThreadsRule(System.String)");
 			AssertValidUrl ("C:Gendarme.Framework.Helpers.MethodSignature.MethodSignature(string,string,string[],System.Func<Mono.Cecil.MethodReference,System.Boolean>)");
-			AssertValidUrl ("C:System.Collections.Generic.Dictionary<TKey,TValue>+KeyCollection.Dictionary<TKey,TValue>.KeyCollection(System.Collections.Generic.Dictionary<TKey,TValue>)");
+			AssertValidUrl ("C:System.Collections.Generic.Dictionary<TKey,TValue>+KeyCollection.KeyCollection(System.Collections.Generic.Dictionary<TKey,TValue>)");
 		}
 
 		[Test]
@@ -127,6 +129,13 @@ namespace MonoTests.MonkeyDoc.Ecma
 			AssertValidUrl ("M:Foo.Bar.FooBar(int@, System.Drawing.Imaging)");
 			AssertValidUrl ("M:Foo.Bar.FooBar(int, System.Drawing.Imaging*)");
 			AssertValidUrl ("M:Foo.Bar.FooBar(int*, System.Drawing.Imaging&)");
+			AssertValidUrl ("M:Atk.NoOpObject.GetRunAttributes(int,int&,int&)");
+		}
+
+		[Test]
+		public void MethodWithArrayArgsValidTest ()
+		{
+			AssertValidUrl ("M:System.Reflection.Emit.SignatureHelper.GetPropertySigHelper(System.Reflection.Module,System.Reflection.CallingConventions,Type,Type[],Type[],Type[],Type[][],Type[][])");
 		}
 
 		[Test]
@@ -139,6 +148,8 @@ namespace MonoTests.MonkeyDoc.Ecma
 		public void FieldValidTest ()
 		{
 			AssertValidUrl ("F:Mono.Terminal.Curses.KeyF10");
+			AssertValidUrl ("F:Novell.Directory.Ldap.Utilclass.ExceptionMessages.NOT_IMPLEMENTED");
+			AssertValidUrl ("F:Novell.Directory.Ldap.LdapException.NOT_ALLOWED_ON_NONLEAF");
 		}
 
 		[Test]
@@ -146,6 +157,15 @@ namespace MonoTests.MonkeyDoc.Ecma
 		{
 			AssertValidUrl ("P:System.Foo.Bar");
 			AssertValidUrl ("P:System.ArraySegment<T>.Array");
+		}
+
+		[Test]
+		public void IndexPropertyValidTest ()
+		{
+			AssertValidUrl ("P:System.ComponentModel.PropertyDescriptorCollection.Item(int)");
+			AssertValidUrl ("P:System.ComponentModel.AttributeCollection.Item(Type)");
+			AssertValidUrl ("P:System.Web.SessionState.HttpSessionStateContainer$System.Web.SessionState.IHttpSessionState.Item(int)");
+			AssertValidUrl ("P:System.Collections.Specialized.BitVector32.Item(System.Collections.Specialized.BitVector32+Section)");
 		}
 
 		[Test]
@@ -337,6 +357,18 @@ namespace MonoTests.MonkeyDoc.Ecma
 			var actual = parser.Parse ("M:Microsoft.Win32.RegistryKey$System.IDisposable.Dispose");
 			Assert.IsNotNull (actual.ExplicitImplMember);
 			Assert.AreEqual ("System.IDisposable.Dispose", ast.ToCompleteMemberName (EcmaDesc.Format.WithoutArgs));
+		}
+
+		[Test]
+		public void SimpleMethodWithNumberInType ()
+		{
+			var ast = new EcmaDesc {
+				DescKind = EcmaDesc.Kind.Method,
+				TypeName = "ASN1",
+				Namespace = "Mono.Security",
+				MemberName = "Add"
+			};
+			AssertUrlDesc (ast, "M:Mono.Security.ASN1.Add");
 		}
 
 		/*		[Test]

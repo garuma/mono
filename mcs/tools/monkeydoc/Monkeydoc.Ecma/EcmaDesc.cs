@@ -144,14 +144,18 @@ namespace Monkeydoc.Ecma
 			 */
 			if (ExplicitImplMember != null) {
 				var impl = ExplicitImplMember;
-				return impl.Namespace + "." + impl.ToCompleteTypeName () + "." + impl.ToCompleteMemberName (format);
+				return impl.FormattedNamespace + impl.ToCompleteTypeName () + "." + impl.ToCompleteMemberName (format);
 			} else if (format == Format.WithArgs && DescKind == Kind.Operator && MemberName.EndsWith ("Conversion")) {
-				var type1 = MemberArguments[0].ToCompleteTypeName () + ModToString (MemberArguments[0]);
-				var type2 = MemberArguments[1].ToCompleteTypeName () + ModToString (MemberArguments[1]);
+				var type1 = MemberArguments[0].FormattedNamespace + MemberArguments[0].ToCompleteTypeName () + ModToString (MemberArguments[0]);
+				var type2 = MemberArguments[1].FormattedNamespace + MemberArguments[1].ToCompleteTypeName () + ModToString (MemberArguments[1]);
 				return string.Format ("{0} to {1}", type1, type2);
 			}
 
 			var result = IsEtc && !string.IsNullOrEmpty (EtcFilter) ? EtcFilter : MemberName;
+
+			// Temporary hack for monodoc produced inner type ctor
+			if (DescKind == Kind.Constructor && NestedType != null)
+				result = ToCompleteTypeName ();
 
 			if (GenericMemberArguments != null)
 				result += FormatGenericArgs (GenericMemberArguments);
@@ -280,6 +284,12 @@ namespace Monkeydoc.Ecma
 				return "@";
 			default:
 				return string.Empty;
+			}
+		}
+
+		string FormattedNamespace {
+			get {
+				return !string.IsNullOrEmpty (Namespace) ? Namespace + "." : string.Empty;
 			}
 		}
 	}

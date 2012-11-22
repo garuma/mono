@@ -344,10 +344,14 @@ namespace MonkeyDoc
 			if (url.StartsWith ("root:/"))
 				return this.GetHelpSourceAndIdFromName (url.Substring ("root:/".Length), out internalId, out node);
 
-			HelpSource helpSource = helpSources.Where (h => h.CanHandleUrl (url)).FirstOrDefault ();
-			if (helpSource == null)
-				return null;
-			internalId = helpSource.GetInternalIdForUrl (url, out node);
+			HelpSource helpSource = null;
+			foreach (var hs in helpSources.Where (h => h.CanHandleUrl (url))) {
+				if (!string.IsNullOrEmpty (internalId = hs.GetInternalIdForUrl (url, out node))) {
+					helpSource = hs;
+					break;
+				}
+			}
+
 			return helpSource;
 		}
 

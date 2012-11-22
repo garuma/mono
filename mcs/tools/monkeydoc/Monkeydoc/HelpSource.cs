@@ -219,7 +219,7 @@ namespace MonkeyDoc
 		public virtual string GetInternalIdForUrl (string url, out Node node)
 		{
 			node = MatchNode (url);
-			return url.Substring (UriPrefix.Length);
+			return node == null ? null : url.Substring (UriPrefix.Length);
 		}
 		
 		public virtual Node MatchNode (string url)
@@ -244,7 +244,7 @@ namespace MonkeyDoc
 				}
 				index = ~index;
 				if (index == current.Nodes.Count) {
-					Console.WriteLine ("Match fail for {0}", strippedUrl);
+					//Console.WriteLine ("Match fail for {0}", strippedUrl);
 					//Console.WriteLine (current.Nodes.Select (n => n.Element).Aggregate ((e1, e2) => e1 + ", " + e2));
 					return SlowMatchNode (Tree.RootNode, cache, strippedUrl);
 				}

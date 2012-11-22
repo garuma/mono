@@ -225,7 +225,7 @@ namespace MonkeyDoc.Providers
 				var typeChar = GetNodeMemberTypeChar (node);
 				var parentNode = GetNodeTypeParent (node);
 				var typeNode = MakeTypeNodeUrl (parentNode).Substring (2);
-				return typeChar + ":" + typeNode + MakeMemberNodeUrl (typeChar, parentNode, node);
+				return typeChar + ":" + typeNode + MakeMemberNodeUrl (typeChar, node);
 			default:
 				return null;
 			}
@@ -239,12 +239,25 @@ namespace MonkeyDoc.Providers
 			return "T:" + node.Parent.Caption + '.' + typeName.Replace ('.', '+');
 		}
 
-		string MakeMemberNodeUrl (char typeChar, Node typeNode, Node node)
+		string MakeMemberNodeUrl (char typeChar, Node node)
 		{
 			// We clean inner type ctor name which may contain the outer type name
 			var caption = node.Caption;
+
+			// Sanitize constructor caption of inner types
 			if (typeChar == 'C') {
-				
+				int lastDot = -1;
+				for (int i = 0; i < caption.Length && caption[i] != '('; i++)
+					lastDot = caption[i] == '.' ? i : lastDot;
+				return lastDot == -1 ? '.' + caption : caption.Substring (lastDot);
+			}
+
+			/* We handle type conversion operator by checking if the name contains " to "
+			 * (as in 'foo to bar') and we generate a corresponding conversion signature
+			 */
+			if (typeChar == 'O' && caption.IndexOf (" to ") != -1) {
+				var parts = caption.Split (' ');
+				return "." + node.Parent.Caption + "(" + parts[0] + ", " + parts[2] + ")";
 			}
 
 			/* The goal here is to treat method which are explicit interface definition
@@ -252,16 +265,11 @@ namespace MonkeyDoc.Providers
 			 * expression thus colliding with the ecma parser.
 			 * If the first non-alpha character in the caption is a dot then we have an
 			 * explicit member implementation (we assume the interface has namespace)
-			 * We also handle type conversion operator by checking if the name contains " to "
-			 * (as in 'foo to bar') and we generate a corresponding conversion signature
 			 */
 			var firstNonAlpha = caption.FirstOrDefault (c => !char.IsLetterOrDigit (c));
 			if (firstNonAlpha == '.')
 				return "$" + caption;
-			if (typeChar == 'O' && caption.IndexOf (" to ") != -1) {
-				var parts = caption.Split (' ');
-				return "." + node.Parent.Caption + "(" + parts[0] + ", " + parts[2] + ")";
-			}
+
 			return "." + caption;
 		}
 
@@ -330,7 +338,7 @@ namespace MonkeyDoc.Providers
 			if (!url.StartsWith (EcmaPrefix)) {
 				node = MatchNode (url);
 				if (node == null)
-					Console.WriteLine ("Crappy crap");
+					return null;
 				id = node.GetInternalUrl ();
 			}
 
@@ -411,8 +419,8 @@ namespace MonkeyDoc.Providers
 			//Console.WriteLine ("Member caption {0}", searchNode.Caption);
 			index = currentNode.Nodes.BinarySearch (searchNode, EcmaGenericNodeComparer.Instance);
 			if (index < 0) {
-				foreach (var n in currentNode.Nodes)
-					Console.WriteLine (n.Caption);
+				//foreach (var n in currentNode.Nodes)
+				//	Console.WriteLine (n.Caption);
 				return null;
 			}
 			result = currentNode.Nodes[index];
