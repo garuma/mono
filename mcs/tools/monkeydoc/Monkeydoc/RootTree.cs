@@ -67,7 +67,7 @@ namespace MonkeyDoc
 			return result;
 		}
 
-		public static RootTree LoadTree (string basedir)
+		public static RootTree LoadTree (string basedir, bool includeExternal = true)
 		{
 			if (string.IsNullOrEmpty (basedir))
 				throw new ArgumentNullException ("basedir");
@@ -77,8 +77,9 @@ namespace MonkeyDoc
 			XmlDocument xmlDocument = new XmlDocument ();
 			string filename = Path.Combine (basedir, "monodoc.xml");
 			xmlDocument.Load (filename);
-			IEnumerable<string> sourceFiles = Directory.EnumerateFiles (Path.Combine (basedir, "sources"), "*.source")
-				.Concat (RootTree.ProbeExternalDirectorySources ());
+			IEnumerable<string> sourceFiles = Directory.EnumerateFiles (Path.Combine (basedir, "sources"), "*.source");
+			if (includeExternal)
+				sourceFiles = sourceFiles.Concat (RootTree.ProbeExternalDirectorySources ());
 			return RootTree.LoadTree (basedir, xmlDocument, sourceFiles);
 		}
 
