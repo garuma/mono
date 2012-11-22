@@ -42,7 +42,17 @@ namespace MonoTests.MonkeyDoc
 				}
 
 				LastCheckMessage = string.Format ("#3 : {0} {1}", hs, id);
-				return hs.IsGeneratedContent (id) ? hs.GetCachedText (id) != null : hs.GetCachedHelpStream (id) != null;
+				if (hs.IsGeneratedContent (id))
+					return hs.GetCachedText (id) != null;
+				else {
+					var s = hs.GetCachedHelpStream (id);
+					if (s != null) {
+						s.Close ();
+						return true;
+					} else {
+						return false;
+					}
+				}
 			}
 		}
 
@@ -52,17 +62,19 @@ namespace MonoTests.MonkeyDoc
 		[Test]
 		public void ReachabilityTest ()
 		{
-			var rootTree = RootTree.LoadTree (Path.GetFullPath (BaseDir));
+			var rootTree = RootTree.LoadTree (Path.GetFullPath (BaseDir), false);
 			Node result;
 			var generator = new CheckGenerator ();
+			int errorCount = 0;
 
 			foreach (var leaf in GetLeaves (rootTree.RootNode)) {
-				Console.WriteLine ("===== NEW ======");
-				Console.WriteLine ("===== Current node: {0} {1} ======", leaf.Element, leaf.Caption);
-				Assert.IsTrue (rootTree.RenderUrl (leaf.PublicUrl, generator, out result), generator.LastCheckMessage + " | " + leaf.PublicUrl);
-				Assert.IsTrue (leaf == result,
-				               string.Format ("{0} != {1} // {2}?", leaf.Element, result.Element, leaf.PublicUrl));
+				if (!rootTree.RenderUrl (leaf.PublicUrl, generator, out result) || leaf != result)
+					Console.WriteLine ("Error: " + leaf.PublicUrl);
+					errorCount++;
+				}
 			}
+
+			Assert.AreEqual (0, errorCount);
 		}
 
 		IEnumerable<Node> GetLeaves (Node node)
