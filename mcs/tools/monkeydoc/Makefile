@@ -112,11 +112,19 @@ LIB_MCS_FLAGS = \
 
 TEST_MCS_FLAGS = /r:System.Core.dll
 
+DOC_SOURCE_DIRS = \
+	../../docs \
+	../../../docs
+
+DOC_SOURCES = $(foreach dir,$(DOC_SOURCE_DIRS),$(wildcard $(dir)/*.source $(dir)/*.tree $(dir)/*.zip))
+
 include ../../build/library.make
 
 $(the_lib): Makefile $(RESOURCE_FILES)
 
 all-local: $(the_lib).config Monkeydoc.Ecma/EcmaUrlParser.cs
+
+test-local: setup-doc-sources
 
 $(the_lib).config: Makefile
 	sed 's,@monodoc_refdir@,$(mono_libdir)/monodoc,g' monkeydoc.dll.config.in > $@
@@ -126,3 +134,6 @@ Monkeydoc.Ecma/EcmaUrlParser.cs: Monkeydoc.Ecma/EcmaUrlParser.jay $(topdir)/jay/
 
 parser.exe: Monkeydoc.Ecma/EcmaUrlParser.cs Monkeydoc.Ecma/EcmaUrlTokenizer.cs Monkeydoc.Ecma/EcmaUrlParserDriver.cs Monkeydoc.Ecma/EcmaDesc.cs
 	mcs /out:$@ /debug $^
+
+setup-doc-sources: $(DOC_SOURCES)
+	cp $(DOC_SOURCES) ./Test/monodoc/sources/
