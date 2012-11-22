@@ -68,7 +68,7 @@ namespace MonoTests.MonkeyDoc
 			int errorCount = 0;
 
 			foreach (var leaf in GetLeaves (rootTree.RootNode)) {
-				if (!rootTree.RenderUrl (leaf.PublicUrl, generator, out result) || leaf != result)
+				if (!rootTree.RenderUrl (leaf.PublicUrl, generator, out result) || leaf != result) {
 					Console.WriteLine ("Error: " + leaf.PublicUrl);
 					errorCount++;
 				}
