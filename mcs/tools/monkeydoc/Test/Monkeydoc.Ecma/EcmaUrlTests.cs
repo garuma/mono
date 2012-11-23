@@ -133,7 +133,7 @@ namespace MonoTests.MonkeyDoc.Ecma
 		}
 
 		[Test]
-		public void MethodWithArrayArgsValidTest ()
+		public void MethodWithJaggedArrayArgsValidTest ()
 		{
 			AssertValidUrl ("M:System.Reflection.Emit.SignatureHelper.GetPropertySigHelper(System.Reflection.Module,System.Reflection.CallingConventions,Type,Type[],Type[],Type[],Type[][],Type[][])");
 		}
@@ -369,6 +369,18 @@ namespace MonoTests.MonkeyDoc.Ecma
 				MemberName = "Add"
 			};
 			AssertUrlDesc (ast, "M:Mono.Security.ASN1.Add");
+		}
+
+		[Test]
+		public void JaggedArrayWithDimensions ()
+		{
+			var ast = new EcmaDesc {
+				DescKind = EcmaDesc.Kind.Type,
+				TypeName = "Int32",
+				Namespace = "System",
+				ArrayDimensions = new int[] { 3, 1, 1 }
+			};
+			AssertUrlDesc (ast, "T:System.Int32[,,][][]");
 		}
 
 		/*		[Test]

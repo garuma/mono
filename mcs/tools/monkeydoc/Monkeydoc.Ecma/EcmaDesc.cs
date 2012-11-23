@@ -66,7 +66,13 @@ namespace Monkeydoc.Ecma
 			set;
 		}
 
-		public int ArrayDimension {
+		/* A list of the array dimensions attached to this type.
+		 * The list count corresponds to the number of recursive
+		 * array definition (jagged arrays) the value of the
+		 * corresponding list item is the number of dimension
+		 * attached to that array definition instance
+		 */
+		public IList<int> ArrayDimensions {
 			get;
 			set;
 		}
@@ -129,8 +135,8 @@ namespace Monkeydoc.Ecma
 				result += FormatGenericArgs (GenericTypeArguments);
 			if (NestedType != null)
 				result += innerTypeSeparator + NestedType.ToCompleteTypeName ();
-			if (ArrayDimension > 0)
-				result += "[" + new string (',', ArrayDimension - 1) + "]";
+			if (ArrayDimensions != null && ArrayDimensions.Count > 0)
+				result += ArrayDimensions.Select (dim => "[" + new string (',', dim - 1) + "]").Aggregate (string.Concat);
 
 			return result;
 		}
@@ -200,10 +206,12 @@ namespace Monkeydoc.Ecma
 				sb.Append ('+');
 				NestedType.ConstructCRef (sb);
 			}
-			if (ArrayDimension > 0) {
-				sb.Append ('[');
-				sb.Append (new string (',', ArrayDimension - 1));
-				sb.Append (']');
+			if (ArrayDimensions != null && ArrayDimensions.Count > 0) {
+				for (int i = 0; i < ArrayDimensions.Count; i++) {
+					sb.Append ('[');
+					sb.Append (new string (',', ArrayDimensions[i] - 1));
+					sb.Append (']');
+				}
 			}
 			if (DescKind == Kind.Type)
 				return;
@@ -223,7 +231,7 @@ namespace Monkeydoc.Ecma
 			                      MemberName ?? string.Empty,
 			                      FormatGenericArgsFull (GenericMemberArguments),
 			                      MemberArguments != null ? "(" + string.Join (",", MemberArguments.Select (m => m.ToString ())) + ")" : string.Empty,
-			                      ArrayDimension > 0 ? "[" + new string (',', ArrayDimension - 1) + "]" : string.Empty,
+			                      ArrayDimensions != null && ArrayDimensions.Count > 0 ? ArrayDimensions.Select (dim => "[" + new string (',', dim - 1) + "]").Aggregate (string.Concat) : string.Empty,
 			                      DescKind.ToString ()[0],
 			                      Etc != 0 ? '(' + Etc.ToString () + ')' : string.Empty);
 			                      
@@ -242,7 +250,7 @@ namespace Monkeydoc.Ecma
 				&& Namespace == other.Namespace
 				&& MemberName == other.MemberName
 				&& NestedType == other.NestedType || NestedType.Equals (other.NestedType)
-				&& ArrayDimension == other.ArrayDimension
+				&& (ArrayDimensions == null || ArrayDimensions.SequenceEqual (other.ArrayDimensions))
 				&& (GenericTypeArguments == null || GenericTypeArguments.SequenceEqual (other.GenericTypeArguments))
 				&& (GenericMemberArguments == null || GenericMemberArguments.SequenceEqual (other.GenericMemberArguments))
 				&& (MemberArguments == null || MemberArguments.SequenceEqual (other.MemberArguments))

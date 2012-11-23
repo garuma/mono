@@ -46,8 +46,8 @@ namespace Monkeydoc.Ecma
                dest.GenericTypeArguments = orig.GenericTypeArguments;
             if (dest.NestedType == null)
                dest.NestedType = orig.NestedType;
-            if (dest.ArrayDimension == 0)
-               dest.ArrayDimension = orig.ArrayDimension;
+            if (dest.ArrayDimensions == null)
+               dest.ArrayDimensions = orig.ArrayDimensions;
             if (string.IsNullOrEmpty (dest.MemberName))
                dest.MemberName = orig.MemberName;
             if (dest.GenericMemberArguments == null)
@@ -121,20 +121,20 @@ type_expression
         : dot_expression type_expression_suffix {
                          var dotExpr = ((List<string>)$1);
                          dotExpr.Reverse ();
-                         $$ = CopyFromEcmaDesc (new EcmaDesc {
-                            DescKind = EcmaDesc.Kind.Type,
-                            Namespace = string.Join (".", dotExpr.Take (dotExpr.Count - 1)),
-                            TypeName = dotExpr.Last ()
-                         }, (EcmaDesc)$2);
+                         var desc = $2 as EcmaDesc;
+                         desc.DescKind = EcmaDesc.Kind.Type;
+                         desc.Namespace = string.Join (".", dotExpr.Take (dotExpr.Count - 1));
+                         desc.TypeName = dotExpr.Last ();
+                         $$ = desc;
                      }
 
 /* To be used in types with no namespaces attached to them like an inner type*/
 reduced_type_expression
         : IDENTIFIER type_expression_suffix {
-                         $$ = CopyFromEcmaDesc (new EcmaDesc {
-                            DescKind = EcmaDesc.Kind.Type,
-                            TypeName = $1 as string
-                         }, (EcmaDesc)$2);
+                         var desc = $2 as EcmaDesc;
+                         desc.DescKind = EcmaDesc.Kind.Type;
+                         desc.TypeName = $1 as string;
+                         $$ = desc;
                      }
 
 type_expression_suffix
@@ -144,7 +144,7 @@ type_expression_suffix
                          $$ = new EcmaDesc {
                             GenericTypeArguments = $1 as List<EcmaDesc>,
                             NestedType = nestedType,
-                            ArrayDimension = $3 == null ? 0 : (int)$3,
+                            ArrayDimensions = $3 as IList<int>,
                             Etc = $4 != null ? ((Tuple<char, string>)$4).Item1 : nestedDescHasEtc ? nestedType.Etc : (char)0,
                             EtcFilter = $4 != null ? ((Tuple<char, string>)$4).Item2 : nestedDescHasEtc ? nestedType.EtcFilter : null
                          };
@@ -168,8 +168,12 @@ generic_type_arg_list
         | generic_type_arg_list COMMA type_expression { ((List<EcmaDesc>)$1).Add ((EcmaDesc)$3); $$ = $1; }
 
 opt_array_definition
-        : /* empty */ { $$ = EcmaDesc.Mod.Normal; }
-        | OP_ARRAY_OPEN opt_array_definition_list OP_ARRAY_CLOSE { $$ = $2; }
+        : /* empty */ { $$ = null; }
+        | OP_ARRAY_OPEN opt_array_definition_list OP_ARRAY_CLOSE opt_array_definition {
+                      var dims = ((IList<int>)$4) ?? new List<int> (2);
+                      dims.Add ((int)$2);
+                      $$ = dims;
+                }
 
 opt_array_definition_list
         : /* empty */ { $$ = 1; }
@@ -185,11 +189,12 @@ etc_identifier
         | IDENTIFIER { $$ = $1; }
 
 method_expression
-        : type_expression DOT IDENTIFIER opt_generic_type_suffix opt_arg_list_suffix { $$ = CopyFromEcmaDesc (new EcmaDesc {
-                           MemberName = $3 as string,
-                           GenericMemberArguments = $4 as List<EcmaDesc>,
-                           MemberArguments = SafeReverse ($5 as List<EcmaDesc>)
-                      }, (EcmaDesc)$1);
+        : type_expression DOT IDENTIFIER opt_generic_type_suffix opt_arg_list_suffix {
+                      var desc = $1 as EcmaDesc;
+                      desc.MemberName = $3 as string;
+                      desc.GenericMemberArguments = $4 as List<EcmaDesc>;
+                      desc.MemberArguments = SafeReverse ($5 as List<EcmaDesc>);
+                      $$ = desc;
                 }
         | dot_expression opt_generic_type_suffix opt_arg_list_suffix {
                       var dotExpr = ((List<string>)$1);
@@ -201,9 +206,10 @@ method_expression
                            MemberArguments = SafeReverse ($3 as List<EcmaDesc>)
                       };
                 }
-        | type_expression EXPLICIT_IMPL_SEP method_expression { $$ = CopyFromEcmaDesc (new EcmaDesc {
-                           ExplicitImplMember = $3 as EcmaDesc
-                      }, (EcmaDesc)$1);
+        | type_expression EXPLICIT_IMPL_SEP method_expression {
+                      var desc = $1 as EcmaDesc;
+                      desc.ExplicitImplMember = $3 as EcmaDesc;
+                      $$ = desc;
                 }
 
 arg_type_expression
@@ -231,14 +237,16 @@ simple_member_expression
                       MemberName = dotExpr[dotExpr.Count - 1]
                  };
              }
-        | type_expression DOT IDENTIFIER { $$ = CopyFromEcmaDesc (new EcmaDesc {
-                           MemberName = $3 as string,
-                      }, (EcmaDesc)$1);
-                }
-        | type_expression EXPLICIT_IMPL_SEP simple_member_expression { $$ = CopyFromEcmaDesc (new EcmaDesc {
-                           ExplicitImplMember = $3 as EcmaDesc
-                      }, (EcmaDesc)$1);
-                }
+        | type_expression DOT IDENTIFIER {
+                 var desc = $1 as EcmaDesc;
+                 desc.MemberName = $3 as string;
+                 $$ = desc;
+             }
+        | type_expression EXPLICIT_IMPL_SEP simple_member_expression {
+                 var desc = $1 as EcmaDesc;
+                 desc.ExplicitImplMember = $3 as EcmaDesc;
+                 $$ = desc;
+             }
 
 constructor_expression
         : method_expression { $$ = $1; }
@@ -247,9 +255,11 @@ operator_expression
         : method_expression { $$ = $1; }
 
 property_expression
-        : simple_member_expression opt_property_indexer { $$ = CopyFromEcmaDesc (new EcmaDesc {
-                           MemberArguments = SafeReverse ($2 as List<EcmaDesc>)
-                      }, (EcmaDesc)$1); }
+        : simple_member_expression opt_property_indexer {
+                 var desc = $1 as EcmaDesc;
+                 desc.MemberArguments = SafeReverse ($2 as List<EcmaDesc>);
+                 $$ = desc;
+             }
 
 opt_property_indexer
         : opt_arg_list_suffix { $$ = $1; }
