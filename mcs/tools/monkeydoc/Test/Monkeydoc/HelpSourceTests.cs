@@ -66,15 +66,17 @@ namespace MonoTests.MonkeyDoc
 			Node result;
 			var generator = new CheckGenerator ();
 			int errorCount = 0;
+			int testCount = 0;
 
 			foreach (var leaf in GetLeaves (rootTree.RootNode)) {
 				if (!rootTree.RenderUrl (leaf.PublicUrl, generator, out result) || leaf != result) {
 					Console.WriteLine ("Error: " + leaf.PublicUrl);
 					errorCount++;
 				}
+				testCount++;
 			}
 
-			Assert.AreEqual (0, errorCount);
+			Assert.AreEqual (0, errorCount, errorCount + " / " + testCount.ToString ());
 		}
 
 		IEnumerable<Node> GetLeaves (Node node)
