@@ -136,4 +136,5 @@ parser.exe: Monkeydoc.Ecma/EcmaUrlParser.cs Monkeydoc.Ecma/EcmaUrlTokenizer.cs M
 	mcs /out:$@ /debug $^
 
 setup-doc-sources: $(DOC_SOURCES)
+	mkdir -p ./Test/monodoc/sources/
 	cp $(DOC_SOURCES) ./Test/monodoc/sources/
