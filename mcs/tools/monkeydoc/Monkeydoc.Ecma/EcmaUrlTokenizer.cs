@@ -11,7 +11,7 @@ namespace Monkeydoc.Ecma
 		object val;
 		int current_token;
 		int current_pos;
-		StringBuilder ident = new StringBuilder (20);
+		int identCount = 0;
 
 		public EcmaUrlTokenizer (TextReader input)
 		{
@@ -121,17 +121,21 @@ namespace Monkeydoc.Ecma
 			}
 
 			if (is_identifier_start_character (current) || current == '*') {
-				ident.Clear ();
-				ident.Append (current);
-				int peek;
+				unsafe {
+					char* pIdent = stackalloc char[256];
+					*pIdent = current;
+					identCount = 1;
 
-				while ((peek = input.Peek ()) != -1 && is_identifier_part_character ((char)peek)) {
-					ident.Append ((char)input.Read ());
-					current_pos++;
+					int peek;
+					while ((peek = input.Peek ()) != -1 && is_identifier_part_character ((char)peek)) {
+						*(pIdent + identCount) = (char)input.Read ();
+						++current_pos;
+						++identCount;
+					}
+
+					val = new string ((char*)pIdent, 0, identCount);
+					return Token.IDENTIFIER;
 				}
-
-				val = ident.ToString ();
-				return Token.IDENTIFIER;
 			} else if (char.IsDigit (current)) {
 				val = current - '0';
 				return Token.DIGIT;
