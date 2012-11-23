@@ -120,6 +120,7 @@ namespace MonoTests.MonkeyDoc.Ecma
 			AssertValidUrl ("T:Foo.Bar.Type/M");
 			AssertValidUrl ("T:Gendarme.Framework.Bitmask<T>/M/Equals");
 			AssertValidUrl ("T:Gendarme.Framework.Helpers.Log/M/WriteLine<T>");
+			AssertValidUrl ("T:System.Windows.Forms.AxHost/M/System.ComponentModel.ICustomTypeDescriptor.GetEvents");
 		}
 
 		[Test]

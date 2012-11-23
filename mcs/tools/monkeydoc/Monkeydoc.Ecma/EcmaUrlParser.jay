@@ -182,7 +182,8 @@ opt_array_definition_list
 opt_etc
         : /* empty */ { $$ = null; }
         | SLASH_SEPARATOR etc_identifier { $$ = Tuple.Create<char, string> (((string)$2)[0], null); }
-        | SLASH_SEPARATOR etc_identifier SLASH_SEPARATOR IDENTIFIER opt_generic_type_suffix { $$ = Tuple.Create<char, string> (((string)$2)[0], (string)$4 + ($5 == null ? string.Empty : "<" + string.Join (",", ((IEnumerable<EcmaDesc>)$5).Select (t => t.ToCompleteTypeName ())) + ">")); }
+        | SLASH_SEPARATOR etc_identifier SLASH_SEPARATOR reduced_member_expression { $$ = Tuple.Create<char, string> (((string)$2)[0], (string)$4); }
+/*        | SLASH_SEPARATOR etc_identifier SLASH_SEPARATOR IDENTIFIER opt_generic_type_suffix { $$ = Tuple.Create<char, string> (((string)$2)[0], (string)$4 + ($5 == null ? string.Empty : "<" + string.Join (",", ((IEnumerable<EcmaDesc>)$5).Select (t => t.ToCompleteTypeName ())) + ">")); } */
 
 etc_identifier
         : STAR { $$ = "*"; }
@@ -212,6 +213,15 @@ method_expression
                       $$ = desc;
                 }
 
+/* To be used with members that may have no type/namespace attached */
+reduced_member_expression
+        : IDENTIFIER opt_generic_type_suffix { $$ = (string)$1 + ($2 == null ? string.Empty : "<" + string.Join (",", ((IEnumerable<EcmaDesc>)$2).Select (t => t.ToCompleteTypeName ())) + ">"); }
+        | IDENTIFIER opt_generic_type_suffix DOT reduced_member_expression {
+                      var existing = $4 as string;
+                      var expr = (string)$1 + ($2 == null ? string.Empty : "<" + string.Join (",", ((IEnumerable<EcmaDesc>)$2).Select (t => t.ToCompleteTypeName ())) + ">");
+                      $$ = expr + "." + existing;
+                }
+
 arg_type_expression
         : type_expression opt_arg_type_suffix { var desc = (EcmaDesc)$1; desc.DescModifier = (EcmaDesc.Mod)$2; $$ = desc; }
 
@@ -232,8 +242,8 @@ simple_member_expression
                  dotExpr.Reverse ();
 
                  $$ = new EcmaDesc {
-                      Namespace = string.Join (".", dotExpr.Take (dotExpr.Count - 2)),
-                      TypeName = dotExpr[dotExpr.Count - 2],
+                      Namespace = dotExpr.Count > 2 ? string.Join (".", dotExpr.Take (dotExpr.Count - 2)) : string.Empty,
+                      TypeName = dotExpr.Count > 1 ?  dotExpr[dotExpr.Count - 2] : string.Empty,
                       MemberName = dotExpr[dotExpr.Count - 1]
                  };
              }
