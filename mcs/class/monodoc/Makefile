@@ -1,5 +1,7 @@
 thisdir = class/monodoc
 SUBDIRS = 
+#NO_SIGN_ASSEMBLY = yes
+
 include ../../build/rules.make
 
 LIBRARY = monodoc.dll

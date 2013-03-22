@@ -212,7 +212,7 @@ namespace Monodoc.Providers
 			currentNode = result;
 			result = null;
 			searchNode.Caption = desc.ToCompleteTypeName ();
-			index = currentNode.ChildNodes.BinarySearch (searchNode, EcmaTypeNodeComparer.Instance);
+			index = currentNode.ChildNodes.BinarySearch (searchNode, desc.GenericTypeArgumentsIsNumeric ? EcmaBackTickTypeNodeComparer.Instance : EcmaTypeNodeComparer.Instance);
 			if (index >= 0)
 				result = currentNode.ChildNodes[index];
 			if ((desc.DescKind == EcmaDesc.Kind.Type && !desc.IsEtc) || index < 0)
@@ -267,16 +267,87 @@ namespace Monodoc.Providers
 
 			public int Compare (Node n1, Node n2)
 			{
-				int length1 = CaptionLength (n1.Caption);
-				int length2 = CaptionLength (n2.Caption);
+				return InternalCompare (n1.Caption, n2.Caption);
+			}
 
-				return string.Compare (n1.Caption, 0, n2.Caption, 0, Math.Max (length1, length2), StringComparison.Ordinal);
+			protected virtual int InternalCompare (string caption1, string caption2)
+			{
+				int length1 = CaptionLength (caption1);
+				int length2 = CaptionLength (caption2);
+
+				return string.Compare (caption1, 0, caption2, 0, Math.Max (length1, length2), StringComparison.Ordinal);				
 			}
 
 			int CaptionLength (string caption)
 			{
 				var length = caption.LastIndexOf (' ');
 				return length == -1 ? caption.Length : length;
+			}
+		}
+
+		// This comparer is used when the search value has a generic tick (`) notation
+		class EcmaBackTickTypeNodeComparer : EcmaTypeNodeComparer
+		{
+			public static readonly EcmaBackTickTypeNodeComparer Instance = new EcmaBackTickTypeNodeComparer ();
+
+			protected override int InternalCompare (string caption1, string caption2)
+			{
+				Console.WriteLine ("C {0} -- {1}", caption1, caption2);
+				FormatGenerics (ref caption1, ref caption2);
+				Console.WriteLine ("C' {0} -- {1}", caption1, caption2);
+				return base.InternalCompare (caption1, caption2);
+			}
+
+			void FormatGenerics (ref string cap1, ref string cap2)
+			{
+				int genericIndex1, genericIndex2;
+				if (!IsGenericType (cap1, out genericIndex1) && !IsGenericType (cap2, out genericIndex2))
+					return;
+
+				int n1, n2;
+				bool has1 = TryExtractBacktick (cap1, out n1);
+				bool has2 = TryExtractBacktick (cap2, out n2);
+
+				Console.WriteLine ("` {0} {1}", has1, n1);
+				Console.WriteLine ("` {0} {1}", has2, n2);
+
+				// If both caption have similar generic style, we go on
+				if (!(has1 ^ has2))
+					return;
+				
+				// otherwise we convert the offending one
+				if (!has1) 
+					cap1 = ConvertToBacktick (cap1, genericIndex1);
+				if (!has2)
+					cap2 = ConvertToBacktick (cap2, genericIndex2);
+			}
+
+			bool IsGenericType (string type, out int genericIndex)
+			{
+				return (genericIndex = type.IndexOf ('<')) != -1;
+			}
+
+			bool TryExtractBacktick (string caption, out int parsedNumber)
+			{
+				int start = caption.LastIndexOf (' ') - 1;
+				if (start < 0)
+					start = caption.Length - 1;
+				parsedNumber = 0;
+				for (int i = start; i >= 0; i--) {
+					if (caption[i] == '`')
+						return true;
+					if (!char.IsDigit (caption, i))
+						return false;
+					parsedNumber = (int)(caption[i] - '0') + (parsedNumber * 10);
+				}
+
+				return false;
+			}
+
+			string ConvertToBacktick (string caption, int genericIndex)
+			{
+				int backtickNumber = CountTypeGenericArguments (caption);
+				return caption.Substring (0, genericIndex) + "`" + backtickNumber;
 			}
 		}
 
@@ -434,6 +505,33 @@ namespace Monodoc.Providers
 				if (node.Caption.Equals (caption, StringComparison.OrdinalIgnoreCase))
 					return node;
 			return null;
+		}
+
+		public static int CountTypeGenericArguments (string typeDefinition)
+		{
+			int nestedLevel = 0;
+			int count = 0;
+			bool started = false;
+
+			foreach (char c in typeDefinition) {
+				switch (c) {
+				case '<':
+					if (!started)
+						count = 1;
+					started = true;
+					nestedLevel++;
+					break;
+				case ',':
+					if (started && nestedLevel == 1)
+						count++;
+					break;
+				case '>':
+					nestedLevel--;
+					break;
+				}
+			}
+
+			return count;
 		}
 
 		internal static string MakeOperatorSignature (XElement member, out string memberSignature)

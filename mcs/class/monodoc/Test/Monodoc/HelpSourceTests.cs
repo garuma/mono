@@ -6,6 +6,9 @@ using System.Collections.Generic;
 using NUnit.Framework;
 
 using Monodoc;
+using Monodoc.Generators;
+
+using HtmlAgilityPack;
 
 namespace MonoTests.Monodoc
 {
@@ -110,6 +113,60 @@ namespace MonoTests.Monodoc
 			Assert.IsTrue (rootTree.RenderUrl ("T:System.Collections.Concurrent.IProducerConsumerCollection`1", generator, out result), "#1");
 			Assert.IsTrue (rootTree.RenderUrl ("T:System.Collections.Generic.Dictionary`2", generator, out result), "#2");
 			Assert.IsTrue (rootTree.RenderUrl ("T:System.Action`4", generator, out result), "#3");
+			Assert.IsTrue (rootTree.RenderUrl ("T:System.EventHandler`1", generator, out result), "#4");
+			Assert.IsTrue (rootTree.RenderUrl ("T:System.Func`5", generator, out result), "#5");
+		}
+
+		[Test, Ignore ("Mono documentation is full of syntax errors so we can't use it reliably for this test")]
+		public void ReachabilityWithCrefsTest ()
+		{
+			var rootTree = RootTree.LoadTree (Path.GetFullPath (BaseDir), false);
+			Node result;
+			var htmlGenerator = new HtmlGenerator (null);
+			var crefs = new HashSet<string> ();
+			var generator = new CheckGenerator ();
+			int errorCount = 0;
+
+			foreach (var leaf in GetLeaves (rootTree.RootNode)) {
+				Dictionary<string, string> context;
+				string internalId = leaf.Tree.HelpSource.GetInternalIdForUrl (leaf.PublicUrl, out result, out context);
+				if (leaf.Tree.HelpSource.GetDocumentTypeForId (internalId) != DocumentType.EcmaXml)
+					continue;
+
+				string content = null;
+				if (string.IsNullOrEmpty (content = rootTree.RenderUrl (leaf.PublicUrl, htmlGenerator, out result)) || leaf != result) {
+					Console.WriteLine ("Error: {0} with HelpSource {1} ", leaf.PublicUrl, leaf.Tree.HelpSource.Name);
+					continue;
+				}
+
+				HtmlDocument doc = new HtmlDocument();
+				try {
+					doc.LoadHtml (content);
+				} catch {
+					Console.WriteLine ("Couldn't load a HTML document for URL {0}", leaf.PublicUrl);
+					continue;
+				}
+
+				foreach (HtmlNode link in doc.DocumentNode.SelectNodes("//a[@href]")) {
+					var newUrl = link.Attributes["href"].Value;
+					var hashIndex = newUrl.IndexOf ('#');
+					if (hashIndex != -1)
+						newUrl = newUrl.Substring (0, hashIndex);
+					if (newUrl.Length > 1 && newUrl[1] == ':' && char.IsLetter (newUrl, 0) && char.ToLowerInvariant (newUrl[0]) != 'c')
+						crefs.Add (newUrl);
+				}
+
+				foreach (var cref in crefs) {
+					if (!rootTree.RenderUrl (cref, generator, out result) || result == null) {
+						Console.WriteLine ("Error with cref: `{0}'", cref);
+						errorCount++;
+					}
+				}
+
+				crefs.Clear ();
+			}
+
+			Assert.AreEqual (0, errorCount, errorCount + " / " + crefs.Count);
 		}
 	}
 }
